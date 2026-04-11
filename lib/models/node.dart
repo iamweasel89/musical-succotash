@@ -12,9 +12,14 @@ class Node {
   NodeStatus status;
   HexPos position;
 
-  /// text node  → own text content
-  /// api node   → last received response (last_result)
+  /// text node → own user-editable content
+  /// api node  → last response text
   String text;
+
+  /// Pushed text slots, keyed by source node id (text nodes only).
+  /// Each connected source occupies one slot; re-running replaces the slot;
+  /// disconnecting clears the slot.
+  final Map<String, String> received;
 
   Node({
     String? id,
@@ -23,13 +28,16 @@ class Node {
     this.status = NodeStatus.idle,
     required this.position,
     this.text = '',
-  }) : id = id ?? const Uuid().v4();
+    Map<String, String>? received,
+  })  : id = id ?? const Uuid().v4(),
+        received = received ?? {};
 
   Node copyWith({
     String? name,
     NodeStatus? status,
     HexPos? position,
     String? text,
+    Map<String, String>? received,
   }) =>
       Node(
         id: id,
@@ -38,6 +46,7 @@ class Node {
         status: status ?? this.status,
         position: position ?? this.position,
         text: text ?? this.text,
+        received: received ?? Map<String, String>.from(this.received),
       );
 
   Map<String, dynamic> toJson() => {
@@ -47,6 +56,7 @@ class Node {
         'status': status.name,
         'position': position.toJson(),
         'text': text,
+        'received': received,
       };
 
   factory Node.fromJson(Map<String, dynamic> j) => Node(
@@ -56,5 +66,8 @@ class Node {
         status: NodeStatus.values.byName(j['status'] as String),
         position: HexPos.fromJson(j['position'] as Map<String, dynamic>),
         text: j['text'] as String,
+        received: (j['received'] as Map<String, dynamic>?)
+                ?.map((k, v) => MapEntry(k, v as String)) ??
+            {},
       );
 }

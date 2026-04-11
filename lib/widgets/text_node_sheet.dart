@@ -122,13 +122,16 @@ class _TextNodeSheetState extends State<TextNodeSheet> {
                 ),
               ),
             ),
-            // Incoming nodes
+            // Incoming slots (received content keyed by source node)
             if (widget.incomingNodes.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('Incoming nodes',
+              const Text('Received',
                   style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              ...widget.incomingNodes.map((n) => _IncomingTile(node: n)),
+              ...widget.incomingNodes.map((n) => _IncomingTile(
+                    node: n,
+                    slotText: widget.node.received[n.id] ?? '',
+                  )),
             ],
           ],
         ),
@@ -139,11 +142,13 @@ class _TextNodeSheetState extends State<TextNodeSheet> {
 
 class _IncomingTile extends StatelessWidget {
   final Node node;
-  const _IncomingTile({required this.node});
+  final String slotText; // what was actually pushed into this text node's slot
+
+  const _IncomingTile({required this.node, required this.slotText});
 
   @override
   Widget build(BuildContext context) {
-    final preview = node.text
+    final preview = slotText
         .split('\n')
         .where((l) => l.trim().isNotEmpty)
         .take(3)
@@ -160,8 +165,11 @@ class _IncomingTile extends StatelessWidget {
         title: Text(node.name.isEmpty ? '(unnamed)' : node.name,
             style: const TextStyle(fontSize: 13)),
         subtitle: preview.isEmpty
-            ? const Text('(empty)', style: TextStyle(color: Colors.grey))
-            : Text(preview, maxLines: 3, overflow: TextOverflow.ellipsis,
+            ? const Text('(no content pushed yet)',
+                style: TextStyle(color: Colors.grey))
+            : Text(preview,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12)),
       ),
     );

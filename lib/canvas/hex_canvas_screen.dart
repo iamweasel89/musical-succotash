@@ -197,6 +197,15 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
   void _deleteNode(String id) {
     _snapshot();
+    // Clear this node's slot from any text nodes that received from it
+    for (final n in _nodes) {
+      if (n.type == NodeType.text && n.received.containsKey(id)) {
+        final newReceived = Map<String, String>.from(n.received)..remove(id);
+        final newStatus =
+            newReceived.isEmpty && n.text.isEmpty ? NodeStatus.idle : n.status;
+        _updateNode(n.copyWith(received: newReceived, status: newStatus));
+      }
+    }
     setState(() {
       _nodes.removeWhere((n) => n.id == id);
       _edges.removeWhere((e) => e.fromId == id || e.toId == id);
@@ -206,12 +215,49 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
   void _deleteEdge(String id) {
     _snapshot();
+    final edge = _edges.where((e) => e.id == id).firstOrNull;
+    if (edge != null) {
+      final toNode = _nodeById(edge.toId);
+      if (toNode != null &&
+          toNode.type == NodeType.text &&
+          toNode.received.containsKey(edge.fromId)) {
+        final newReceived = Map<String, String>.from(toNode.received)
+          ..remove(edge.fromId);
+        final newStatus = newReceived.isEmpty && toNode.text.isEmpty
+            ? NodeStatus.idle
+            : toNode.status;
+        _updateNode(toNode.copyWith(received: newReceived, status: newStatus));
+      }
+    }
     setState(() => _edges.removeWhere((e) => e.id == id));
     _saveState();
   }
 
   void _deleteNodeEdges(String nodeId) {
     _snapshot();
+    // Clear slots in downstream text nodes (outgoing edges)
+    for (final e in _edges.where((e) => e.fromId == nodeId)) {
+      final toNode = _nodeById(e.toId);
+      if (toNode != null &&
+          toNode.type == NodeType.text &&
+          toNode.received.containsKey(nodeId)) {
+        final newReceived = Map<String, String>.from(toNode.received)
+          ..remove(nodeId);
+        final newStatus = newReceived.isEmpty && toNode.text.isEmpty
+            ? NodeStatus.idle
+            : toNode.status;
+        _updateNode(toNode.copyWith(received: newReceived, status: newStatus));
+      }
+    }
+    // Clear received slots of this node if it's a text node (incoming edges removed)
+    final thisNode = _nodeById(nodeId);
+    if (thisNode != null &&
+        thisNode.type == NodeType.text &&
+        thisNode.received.isNotEmpty) {
+      final newStatus =
+          thisNode.text.isEmpty ? NodeStatus.idle : thisNode.status;
+      _updateNode(thisNode.copyWith(received: {}, status: newStatus));
+    }
     setState(
         () => _edges.removeWhere((e) => e.fromId == nodeId || e.toId == nodeId));
     _saveState();
@@ -243,17 +289,19 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     _snapshot();
     setState(
         () => _edges.add(Edge(fromId: fromId, toId: toId, waypoints: waypoints)));
-    // Push source text into target text-node on connection
+    // Push source text into target text-node slot on connection
     final fromNode = _nodeById(fromId);
     final toNode = _nodeById(toId);
     if (fromNode != null &&
-        fromNode.text.isNotEmpty &&
         toNode != null &&
         toNode.type == NodeType.text) {
-      final combined = toNode.text.isEmpty
-          ? fromNode.text
-          : '${toNode.text}\n\n${fromNode.text}';
-      _updateNode(toNode.copyWith(text: combined, status: NodeStatus.done));
+      final srcText = _effectiveText(fromNode);
+      if (srcText.isNotEmpty) {
+        final newReceived = Map<String, String>.from(toNode.received)
+          ..[fromId] = srcText;
+        _updateNode(toNode.copyWith(
+            received: newReceived, status: NodeStatus.done));
+      }
     }
     _saveState();
   }
@@ -269,32 +317,43 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   ApiNodeSettings _settingsFor(Node node) =>
       nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
 
-  // Push api node result into all downstream text nodes (concatenate)
+  // Push api node result into all downstream text-node slots (replace slot)
   void _propagateApiResult(Node apiNode) {
     if (apiNode.text.isEmpty) return;
     for (final e in _edges.where((e) => e.fromId == apiNode.id)) {
       final target = _nodeById(e.toId);
       if (target == null || target.type != NodeType.text) continue;
-      final combined = target.text.isEmpty
-          ? apiNode.text
-          : '${target.text}\n\n${apiNode.text}';
-      _updateNode(target.copyWith(text: combined, status: NodeStatus.done));
+      final newReceived = Map<String, String>.from(target.received)
+        ..[apiNode.id] = apiNode.text;
+      _updateNode(
+          target.copyWith(received: newReceived, status: NodeStatus.done));
     }
   }
 
-  // Build concatenated input text for a node (incoming texts joined with \n\n)
+  // Effective text of a node: received slots + own text (for text nodes),
+  // or just .text (for api nodes).
+  String _effectiveText(Node node) {
+    if (node.type == NodeType.api) return node.text;
+    final parts = <String>[
+      ...node.received.values.where((t) => t.isNotEmpty),
+      if (node.text.isNotEmpty) node.text,
+    ];
+    return parts.join('\n\n');
+  }
+
+  // Build input string for an API node: collect effective text from upstream nodes.
+  // For text nodes used as token-count display in sheet, returns _effectiveText.
   String _buildInput(Node node) {
-    final incoming = _edges
+    if (node.type == NodeType.text) return _effectiveText(node);
+    final parts = _edges
         .where((e) => e.toId == node.id)
         .map((e) => _nodeById(e.fromId))
         .whereType<Node>()
+        .map(_effectiveText)
+        .where((t) => t.isNotEmpty)
         .toList();
-    if (incoming.isEmpty) return node.text;
-    final parts = incoming.map((n) => n.text).where((t) => t.isNotEmpty);
-    final joined = parts.join('\n\n');
-    final own = node.text.trimLeft();
-    if (own.isEmpty) return joined;
-    return joined.isEmpty ? own : '$joined\n\n$own';
+    if (node.text.isNotEmpty) parts.add(node.text);
+    return parts.join('\n\n');
   }
 
   // ── Gesture: scale (pan/zoom + 1-finger routing) ──────────────────────────
@@ -506,7 +565,9 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         _showNodeSettings(node);
       case 'clear':
         _snapshot();
-        _updateNode(node.copyWith(text: '', status: NodeStatus.idle));
+        final newStatus =
+            node.received.isEmpty ? NodeStatus.idle : node.status;
+        _updateNode(node.copyWith(text: '', status: newStatus));
       case 'del_edges':
         _deleteNodeEdges(node.id);
       case 'delete':
