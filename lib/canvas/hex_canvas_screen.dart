@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/edge.dart';
 import '../models/node.dart';
 import '../models/hex_pos.dart';
 import '../models/settings.dart';
+import '../services/api_runner.dart';
 import '../widgets/node_type_picker.dart';
 import '../widgets/node_popup.dart';
 import '../widgets/settings_sheet.dart';
@@ -54,6 +57,9 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   // ── UI mode ───────────────────────────────────────────────────────────────
   bool _deleteMode = false;
 
+  // ── API run stats (per node id) ───────────────────────────────────────────
+  final Map<String, RunStats> _lastRunStats = {};
+
   // ── Gesture: tap tracking ─────────────────────────────────────────────────
   Offset _tapDownLocal = Offset.zero;
 
@@ -83,6 +89,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     )..repeat(reverse: true);
     _pulseAnim = CurvedAnimation(parent: _pulse, curve: Curves.easeInOut);
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    _loadState();
   }
 
   @override
@@ -91,6 +98,46 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     _frameMs.dispose();
     super.dispose();
+  }
+
+  // ── Hive persistence ──────────────────────────────────────────────────────
+  Box<String> get _box => Hive.box<String>('state');
+
+  void _saveState() {
+    _box.put('nodes', jsonEncode(_nodes.map((n) => n.toJson()).toList()));
+    _box.put('edges', jsonEncode(_edges.map((e) => e.toJson()).toList()));
+    _box.put('settings', jsonEncode(_settings.toJson()));
+  }
+
+  void _loadState() {
+    try {
+      final nodesRaw = _box.get('nodes');
+      if (nodesRaw != null) {
+        _nodes.addAll(
+          (jsonDecode(nodesRaw) as List)
+              .map((j) => Node.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+      final edgesRaw = _box.get('edges');
+      if (edgesRaw != null) {
+        _edges.addAll(
+          (jsonDecode(edgesRaw) as List)
+              .map((j) => Edge.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+      final settingsRaw = _box.get('settings');
+      if (settingsRaw != null) {
+        final s = GlobalSettings.fromJson(
+            jsonDecode(settingsRaw) as Map<String, dynamic>);
+        _settings.anthropicKey = s.anthropicKey;
+        _settings.openAiKey = s.openAiKey;
+        _settings.deepSeekKey = s.deepSeekKey;
+        _settings.defaultSystemPrompt = s.defaultSystemPrompt;
+        _settings.streamingMode = s.streamingMode;
+      }
+    } catch (_) {
+      // Corrupt state — start fresh
+    }
   }
 
   void _onTimings(List<FrameTiming> t) {
@@ -144,9 +191,8 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
   void _createNode(HexPos hex, NodeType type) {
     _snapshot();
-    setState(() {
-      _nodes.add(Node(type: type, position: hex));
-    });
+    setState(() => _nodes.add(Node(type: type, position: hex)));
+    _saveState();
   }
 
   void _deleteNode(String id) {
@@ -155,17 +201,20 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
       _nodes.removeWhere((n) => n.id == id);
       _edges.removeWhere((e) => e.fromId == id || e.toId == id);
     });
+    _saveState();
   }
 
   void _deleteEdge(String id) {
     _snapshot();
     setState(() => _edges.removeWhere((e) => e.id == id));
+    _saveState();
   }
 
   void _deleteNodeEdges(String nodeId) {
     _snapshot();
     setState(
         () => _edges.removeWhere((e) => e.fromId == nodeId || e.toId == nodeId));
+    _saveState();
   }
 
   void _moveNode(String id, HexPos to) {
@@ -174,17 +223,16 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     _snapshot();
     setState(() {
       _nodes[idx] = _nodes[idx].copyWith(position: to);
-      // Straighten all edges connected to this node
       for (int i = 0; i < _edges.length; i++) {
         if (_edges[i].fromId == id || _edges[i].toId == id) {
           _edges[i] = _edges[i].copyWith(waypoints: []);
         }
       }
     });
+    _saveState();
   }
 
   void _createEdge(String fromId, String toId, List<HexPos> waypoints) {
-    // Max 2 edges between same pair; only allowed if opposite direction
     final existing = _edges
         .where((e) =>
             (e.fromId == fromId && e.toId == toId) ||
@@ -195,22 +243,25 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     _snapshot();
     setState(
         () => _edges.add(Edge(fromId: fromId, toId: toId, waypoints: waypoints)));
-    // Propagate last_result of fromNode to toNode immediately
     final fromNode = _nodeById(fromId);
-    final toNode = _nodeById(toId);
     if (fromNode != null &&
         fromNode.type == NodeType.api &&
-        fromNode.text.isNotEmpty &&
-        toNode != null) {
+        fromNode.text.isNotEmpty) {
       _propagateApiResult(fromNode);
     }
+    _saveState();
   }
 
   void _updateNode(Node updated) {
     final idx = _nodes.indexWhere((n) => n.id == updated.id);
     if (idx < 0) return;
     setState(() => _nodes[idx] = updated);
+    _saveState();
   }
+
+  // Delegate to the per-node settings stored in api_node_sheet.dart
+  ApiNodeSettings _settingsFor(Node node) =>
+      _nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
 
   // Propagate api node result to all downstream nodes
   void _propagateApiResult(Node apiNode) {
@@ -497,6 +548,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
           buildInput: _buildInput,
           onChanged: _updateNode,
           onRun: _runApiNode,
+          lastRunStats: _lastRunStats[node.id],
         ),
       );
     }
@@ -505,21 +557,54 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   void _runApiNode(Node node) async {
     final input = _buildInput(node);
     if (input.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No input text to send')),
       );
       return;
     }
-    _updateNode(node.copyWith(status: NodeStatus.running));
-    // Actual HTTP call delegated to ApiNodeSheet / api_runner.dart (Phase 2)
-    // For now simulate with a short delay
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
-    _updateNode(node.copyWith(
-      status: NodeStatus.done,
-      text: '[result placeholder]',
-    ));
-    _propagateApiResult(_nodeById(node.id)!);
+
+    _updateNode(node.copyWith(status: NodeStatus.running, text: ''));
+
+    final apiSettings = _settingsFor(node);
+
+    await runApiNode(
+      node: node,
+      input: input,
+      settings: _settings,
+      apiSettings: apiSettings,
+      onChunk: (chunk) {
+        if (!mounted) return;
+        final current = _nodeById(node.id);
+        if (current != null) {
+          _updateNode(current.copyWith(text: current.text + chunk));
+        }
+      },
+      onComplete: (result, stats) {
+        if (!mounted) return;
+        final updated = _nodeById(node.id)?.copyWith(
+              status: NodeStatus.done,
+              text: result,
+            );
+        if (updated != null) {
+          _updateNode(updated);
+          _propagateApiResult(updated);
+          // Store last run stats for the sheet to display
+          _lastRunStats[node.id] = stats;
+        }
+      },
+      onError: (err) {
+        if (!mounted) return;
+        final current = _nodeById(node.id);
+        if (current != null) {
+          _updateNode(current.copyWith(status: NodeStatus.error, text: err));
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $err'),
+              behavior: SnackBarBehavior.floating),
+        );
+      },
+    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────

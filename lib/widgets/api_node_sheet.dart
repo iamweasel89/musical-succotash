@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/node.dart';
 import '../models/settings.dart';
+import '../services/api_runner.dart';
 
 const _providers = ['anthropic', 'openai', 'deepseek'];
 const _models = {
@@ -37,6 +38,7 @@ class ApiNodeSheet extends StatefulWidget {
   final String Function(Node) buildInput;
   final void Function(Node) onChanged;
   final void Function(Node) onRun;
+  final RunStats? lastRunStats;
 
   const ApiNodeSheet({
     super.key,
@@ -45,6 +47,7 @@ class ApiNodeSheet extends StatefulWidget {
     required this.buildInput,
     required this.onChanged,
     required this.onRun,
+    this.lastRunStats,
   });
 
   @override
@@ -202,13 +205,24 @@ class _ApiNodeSheetState extends State<ApiNodeSheet> {
               const Text('Last result',
                   style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
-              Text(
-                'Output: ~$resultTokens tok',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontFamily: 'monospace'),
-              ),
+              if (widget.lastRunStats != null)
+                Text(
+                  'in: ${widget.lastRunStats!.inputTokens} tok  '
+                  'out: ${widget.lastRunStats!.outputTokens} tok  '
+                  '${widget.lastRunStats!.elapsed.inMilliseconds} ms',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontFamily: 'monospace'),
+                )
+              else
+                Text(
+                  'Output: ~$resultTokens tok',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontFamily: 'monospace'),
+                ),
               const SizedBox(height: 6),
               Text(
                 _node.text,
