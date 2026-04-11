@@ -237,7 +237,7 @@ class HexPainter extends CustomPainter {
     final len = dir.distance;
     if (len > 0) {
       final unit = dir / len;
-      _drawArrow(canvas, tip - unit * ringR, unit, color);
+      _drawArrow(canvas, tip - unit * (ringR + ringW / 2), unit, color);
     }
   }
 

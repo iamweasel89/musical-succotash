@@ -243,11 +243,17 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     _snapshot();
     setState(
         () => _edges.add(Edge(fromId: fromId, toId: toId, waypoints: waypoints)));
+    // Push source text into target text-node on connection
     final fromNode = _nodeById(fromId);
+    final toNode = _nodeById(toId);
     if (fromNode != null &&
-        fromNode.type == NodeType.api &&
-        fromNode.text.isNotEmpty) {
-      _propagateApiResult(fromNode);
+        fromNode.text.isNotEmpty &&
+        toNode != null &&
+        toNode.type == NodeType.text) {
+      final combined = toNode.text.isEmpty
+          ? fromNode.text
+          : '${toNode.text}\n\n${fromNode.text}';
+      _updateNode(toNode.copyWith(text: combined, status: NodeStatus.done));
     }
     _saveState();
   }
@@ -263,14 +269,16 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   ApiNodeSettings _settingsFor(Node node) =>
       nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
 
-  // Propagate api node result to all downstream nodes
+  // Push api node result into all downstream text nodes (concatenate)
   void _propagateApiResult(Node apiNode) {
+    if (apiNode.text.isEmpty) return;
     for (final e in _edges.where((e) => e.fromId == apiNode.id)) {
       final target = _nodeById(e.toId);
-      if (target == null) continue;
-      // For text nodes, downstream text = concatenated input
-      // (handled live in the sheet; here we just notify state changed)
-      setState(() {});
+      if (target == null || target.type != NodeType.text) continue;
+      final combined = target.text.isEmpty
+          ? apiNode.text
+          : '${target.text}\n\n${apiNode.text}';
+      _updateNode(target.copyWith(text: combined, status: NodeStatus.done));
     }
   }
 
@@ -473,6 +481,8 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
       items: [
         const PopupMenuItem(value: 'copy', child: Text('Copy text')),
         const PopupMenuItem(value: 'settings', child: Text('Settings')),
+        if (node.type == NodeType.text)
+          const PopupMenuItem(value: 'clear', child: Text('Clear text')),
         const PopupMenuItem(value: 'del_edges', child: Text('Delete all edges')),
         const PopupMenuItem(value: 'delete', child: Text('Delete node')),
         if (node.type == NodeType.api)
@@ -494,6 +504,9 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         }
       case 'settings':
         _showNodeSettings(node);
+      case 'clear':
+        _snapshot();
+        _updateNode(node.copyWith(text: '', status: NodeStatus.idle));
       case 'del_edges':
         _deleteNodeEdges(node.id);
       case 'delete':
