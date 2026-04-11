@@ -6,7 +6,6 @@ const placeholder    = document.getElementById('placeholder');
 const startBtn       = document.getElementById('startBtn');
 const stopBtn        = document.getElementById('stopBtn');
 const flipBtn        = document.getElementById('flipBtn');
-const pickBtn        = document.getElementById('pickBtn');
 const clearBtn       = document.getElementById('clearBtn');
 const hint           = document.getElementById('hint');
 const colorRow       = document.getElementById('colorRow');
@@ -21,12 +20,11 @@ const highlightInput = document.getElementById('highlightColor');
 // willReadFrequently — performance hint for frequent getImageData calls
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-let stream       = null;
-let animId       = null;
-let pickedColor  = null;  // { r, g, b }
-let pickMode     = false;
+let stream      = null;
+let animId      = null;
+let pickedColor = null;  // { r, g, b }
 // 'environment' = задняя камера (по умолчанию для мобильных), 'user' = фронтальная
-let facingMode   = 'environment';
+let facingMode  = 'environment';
 
 // ── Camera ────────────────────────────────────────────────────────────────
 
@@ -51,18 +49,23 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
 
-    // Size canvas to video resolution once known
-    video.addEventListener('loadedmetadata', () => {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }, { once: true });
+    // Cap canvas to 640px wide — full 1080p kills mobile JS performance
+    const setCanvasSize = () => {
+      const MAX_W = 640;
+      const scale = Math.min(1, MAX_W / (video.videoWidth || MAX_W));
+      canvas.width  = Math.round((video.videoWidth  || MAX_W) * scale);
+      canvas.height = Math.round((video.videoHeight || 360)   * scale);
+    };
+    video.addEventListener('loadedmetadata', setCanvasSize, { once: true });
+    if (video.videoWidth) setCanvasSize(); // already available
 
     placeholder.style.display = 'none';
     canvas.style.display      = 'block';
     startBtn.disabled = true;
     stopBtn.disabled  = false;
     flipBtn.disabled  = false;
-    pickBtn.disabled  = false;
+    clearBtn.disabled = false;
+    hint.textContent  = 'Нажмите на любую точку видео, чтобы выбрать цвет';
 
     if (!animId) startLoop();
   } catch (e) {
@@ -84,38 +87,28 @@ function stopCamera() {
   video.srcObject           = null;
   canvas.style.display      = 'none';
   placeholder.style.display = '';
+  hint.textContent          = '';
 
-  setPickMode(false);
   clearSelection();
 
   startBtn.disabled = false;
   stopBtn.disabled  = true;
   flipBtn.disabled  = true;
-  pickBtn.disabled  = true;
   clearBtn.disabled = true;
 }
 
-// ── Pick mode ─────────────────────────────────────────────────────────────
+// ── Pick color by tapping the canvas ─────────────────────────────────────
+// No intermediate "pick mode" needed — any tap picks the color directly.
 
-pickBtn.addEventListener('click', () => setPickMode(!pickMode));
-
-function setPickMode(on) {
-  pickMode = on;
-  pickBtn.classList.toggle('active', on);
-  canvas.classList.toggle('pick-mode', on);
-  hint.textContent = on ? 'Кликните на объект, чтобы выбрать его цвет' : '';
-}
-
-canvas.addEventListener('click', (e) => {
-  if (!pickMode || !stream) return;
+function pickColorAt(clientX, clientY) {
+  if (!stream) return;
 
   const rect   = canvas.getBoundingClientRect();
   const scaleX = canvas.width  / rect.width;
   const scaleY = canvas.height / rect.height;
-  const x = Math.round((e.clientX - rect.left) * scaleX);
-  const y = Math.round((e.clientY - rect.top)  * scaleY);
+  const x = Math.round((clientX - rect.left) * scaleX);
+  const y = Math.round((clientY - rect.top)  * scaleY);
 
-  // Sample pixel from the current frame (video drawn every tick)
   const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
 
   pickedColor = { r, g, b };
@@ -123,19 +116,27 @@ canvas.addEventListener('click', (e) => {
   colorPreview.style.background = hex;
   colorHex.textContent          = hex;
   colorRow.style.display        = '';
-  clearBtn.disabled             = false;
+  hint.textContent              = 'Цвет выбран. Нажмите снова, чтобы изменить.';
+}
 
-  setPickMode(false);
-  hint.textContent = 'Цвет выбран. Настройте допуск и интенсивность.';
+// Touch: use touchend to get last touch position without triggering scroll
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  pickColorAt(t.clientX, t.clientY);
+}, { passive: false });
+
+// Fallback for mouse / desktop
+canvas.addEventListener('click', (e) => {
+  pickColorAt(e.clientX, e.clientY);
 });
 
 clearBtn.addEventListener('click', clearSelection);
 
 function clearSelection() {
-  pickedColor             = null;
-  colorRow.style.display  = 'none';
-  clearBtn.disabled       = true;
-  hint.textContent        = '';
+  pickedColor            = null;
+  colorRow.style.display = 'none';
+  if (stream) hint.textContent = 'Нажмите на любую точку видео, чтобы выбрать цвет';
 }
 
 // ── Sliders ───────────────────────────────────────────────────────────────

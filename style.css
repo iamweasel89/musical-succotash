@@ -99,12 +99,13 @@ h1 {
   transform: translateY(-1px);
 }
 
-#startBtn  { background: #5a5aff; color: #fff; }
-#stopBtn   { background: #ff5a5a; color: #fff; }
-#flipBtn   { background: #252535; color: #c0c0d8; border: 1px solid #3a3a50; }
-#pickBtn   { background: #252535; color: #c0c0d8; border: 1px solid #3a3a50; }
-#pickBtn.active { background: #ff9f1c; color: #000; border-color: #ff9f1c; }
-#clearBtn  { background: #252535; color: #c0c0d8; border: 1px solid #3a3a50; }
+#startBtn { background: #5a5aff; color: #fff; }
+#stopBtn  { background: #ff5a5a; color: #fff; }
+#flipBtn  { background: #252535; color: #c0c0d8; border: 1px solid #3a3a50; }
+#clearBtn { background: #252535; color: #c0c0d8; border: 1px solid #3a3a50; }
+
+/* Canvas is always a tap target when camera is on */
+#canvas { cursor: crosshair; }
 
 /* Hint */
 .hint {
