@@ -1,0 +1,708 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+
+import '../models/edge.dart';
+import '../models/node.dart';
+import '../models/hex_pos.dart';
+import '../models/settings.dart';
+import '../widgets/node_type_picker.dart';
+import '../widgets/node_popup.dart';
+import '../widgets/settings_sheet.dart';
+import '../widgets/text_node_sheet.dart';
+import '../widgets/api_node_sheet.dart';
+import 'hex_math.dart';
+import 'hex_painter.dart';
+
+// ── Snapshot for undo ──────────────────────────────────────────────────────
+class _Snap {
+  final List<Node> nodes;
+  final List<Edge> edges;
+  _Snap(List<Node> nodes, List<Edge> edges)
+      : nodes = nodes.map((n) => n.copyWith()).toList(),
+        edges = edges.map((e) => e.copyWith()).toList();
+}
+
+// ── Screen ─────────────────────────────────────────────────────────────────
+class HexCanvasScreen extends StatefulWidget {
+  const HexCanvasScreen({super.key});
+
+  @override
+  State<HexCanvasScreen> createState() => _HexCanvasScreenState();
+}
+
+class _HexCanvasScreenState extends State<HexCanvasScreen>
+    with TickerProviderStateMixin {
+  // ── Canvas transform ─────────────────────────────────────────────────────
+  Offset _pan = Offset.zero;
+  double _scale = 1.0;
+  double _baseScale = 1.0;
+  Offset _basePan = Offset.zero;
+  Offset _focalStart = Offset.zero;
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  final List<Node> _nodes = [];
+  final List<Edge> _edges = [];
+  final GlobalSettings _settings = GlobalSettings();
+
+  // ── Undo ──────────────────────────────────────────────────────────────────
+  final List<_Snap> _undoStack = [];
+  static const int _maxUndo = 50;
+
+  // ── UI mode ───────────────────────────────────────────────────────────────
+  bool _deleteMode = false;
+
+  // ── Gesture: tap tracking ─────────────────────────────────────────────────
+  Offset _tapDownLocal = Offset.zero;
+
+  // ── Gesture: edge routing ─────────────────────────────────────────────────
+  String? _routingFromId;
+  List<HexPos> _routingPath = []; // hexes traced (after source hex)
+  Offset _routingFinger = Offset.zero; // in world coords
+
+  // ── Gesture: move mode ────────────────────────────────────────────────────
+  String? _movingNodeId;
+  HexPos? _moveOrigin;
+  HexPos? _moveTarget;
+
+  // ── Animation: pulse for running nodes ───────────────────────────────────
+  late final AnimationController _pulse;
+  late final Animation<double> _pulseAnim;
+
+  // ── Frame time ────────────────────────────────────────────────────────────
+  final ValueNotifier<double> _frameMs = ValueNotifier(0);
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      duration: const Duration(milliseconds: 900),
+      vsync: this,
+    )..repeat(reverse: true);
+    _pulseAnim = CurvedAnimation(parent: _pulse, curve: Curves.easeInOut);
+    SchedulerBinding.instance.addTimingsCallback(_onTimings);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+    _frameMs.dispose();
+    super.dispose();
+  }
+
+  void _onTimings(List<FrameTiming> t) {
+    if (t.isNotEmpty) _frameMs.value = t.last.totalSpan.inMicroseconds / 1000.0;
+  }
+
+  // ── Undo helpers ──────────────────────────────────────────────────────────
+  void _snapshot() {
+    _undoStack.add(_Snap(_nodes, _edges));
+    if (_undoStack.length > _maxUndo) _undoStack.removeAt(0);
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    final snap = _undoStack.removeLast();
+    setState(() {
+      _nodes
+        ..clear()
+        ..addAll(snap.nodes);
+      _edges
+        ..clear()
+        ..addAll(snap.edges);
+    });
+  }
+
+  // ── Node helpers ──────────────────────────────────────────────────────────
+  Node? _nodeAt(HexPos hex) {
+    for (final n in _nodes) {
+      if (n.position == hex) return n;
+    }
+    return null;
+  }
+
+  Edge? _edgeAt(HexPos hex) {
+    for (final e in _edges) {
+      final from = _nodeById(e.fromId);
+      final to = _nodeById(e.toId);
+      if (from == null || to == null) continue;
+      final all = [from.position, ...e.waypoints, to.position];
+      if (all.contains(hex)) return e;
+    }
+    return null;
+  }
+
+  Node? _nodeById(String id) {
+    for (final n in _nodes) {
+      if (n.id == id) return n;
+    }
+    return null;
+  }
+
+  void _createNode(HexPos hex, NodeType type) {
+    _snapshot();
+    setState(() {
+      _nodes.add(Node(type: type, position: hex));
+    });
+  }
+
+  void _deleteNode(String id) {
+    _snapshot();
+    setState(() {
+      _nodes.removeWhere((n) => n.id == id);
+      _edges.removeWhere((e) => e.fromId == id || e.toId == id);
+    });
+  }
+
+  void _deleteEdge(String id) {
+    _snapshot();
+    setState(() => _edges.removeWhere((e) => e.id == id));
+  }
+
+  void _deleteNodeEdges(String nodeId) {
+    _snapshot();
+    setState(
+        () => _edges.removeWhere((e) => e.fromId == nodeId || e.toId == nodeId));
+  }
+
+  void _moveNode(String id, HexPos to) {
+    final idx = _nodes.indexWhere((n) => n.id == id);
+    if (idx < 0) return;
+    _snapshot();
+    setState(() {
+      _nodes[idx] = _nodes[idx].copyWith(position: to);
+      // Straighten all edges connected to this node
+      for (int i = 0; i < _edges.length; i++) {
+        if (_edges[i].fromId == id || _edges[i].toId == id) {
+          _edges[i] = _edges[i].copyWith(waypoints: []);
+        }
+      }
+    });
+  }
+
+  void _createEdge(String fromId, String toId, List<HexPos> waypoints) {
+    // Max 2 edges between same pair; only allowed if opposite direction
+    final existing = _edges
+        .where((e) =>
+            (e.fromId == fromId && e.toId == toId) ||
+            (e.fromId == toId && e.toId == fromId))
+        .toList();
+    if (existing.length >= 2) return;
+    if (existing.any((e) => e.fromId == fromId && e.toId == toId)) return;
+    _snapshot();
+    setState(
+        () => _edges.add(Edge(fromId: fromId, toId: toId, waypoints: waypoints)));
+    // Propagate last_result of fromNode to toNode immediately
+    final fromNode = _nodeById(fromId);
+    final toNode = _nodeById(toId);
+    if (fromNode != null &&
+        fromNode.type == NodeType.api &&
+        fromNode.text.isNotEmpty &&
+        toNode != null) {
+      _propagateApiResult(fromNode);
+    }
+  }
+
+  void _updateNode(Node updated) {
+    final idx = _nodes.indexWhere((n) => n.id == updated.id);
+    if (idx < 0) return;
+    setState(() => _nodes[idx] = updated);
+  }
+
+  // Propagate api node result to all downstream nodes
+  void _propagateApiResult(Node apiNode) {
+    for (final e in _edges.where((e) => e.fromId == apiNode.id)) {
+      final target = _nodeById(e.toId);
+      if (target == null) continue;
+      // For text nodes, downstream text = concatenated input
+      // (handled live in the sheet; here we just notify state changed)
+      setState(() {});
+    }
+  }
+
+  // Build concatenated input text for a node (incoming texts joined with \n\n)
+  String _buildInput(Node node) {
+    final incoming = _edges
+        .where((e) => e.toId == node.id)
+        .map((e) => _nodeById(e.fromId))
+        .whereType<Node>()
+        .toList();
+    if (incoming.isEmpty) return node.text;
+    final parts = incoming.map((n) => n.text).where((t) => t.isNotEmpty);
+    final joined = parts.join('\n\n');
+    final own = node.text.trimLeft();
+    if (own.isEmpty) return joined;
+    return joined.isEmpty ? own : '$joined\n\n$own';
+  }
+
+  // ── Gesture: scale (pan/zoom + 1-finger routing) ──────────────────────────
+  void _onScaleStart(ScaleStartDetails d) {
+    // If second finger arrives during routing → cancel routing
+    if (d.pointerCount >= 2 && _routingFromId != null) {
+      setState(() {
+        _routingFromId = null;
+        _routingPath = [];
+      });
+    }
+    _focalStart = d.localFocalPoint;
+    _baseScale = _scale;
+    _basePan = _pan;
+
+    // Start routing only for single finger starting on a node
+    if (d.pointerCount == 1 && _movingNodeId == null) {
+      final world = screenToWorld(d.localFocalPoint, _pan, _scale);
+      final hex = worldToHex(world);
+      final node = _nodeAt(hex);
+      if (node != null) {
+        setState(() {
+          _routingFromId = node.id;
+          _routingPath = [];
+          _routingFinger = world;
+        });
+      }
+    }
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    if (d.pointerCount >= 2) {
+      // Cancel routing if second finger arrives mid-gesture
+      if (_routingFromId != null) {
+        setState(() {
+          _routingFromId = null;
+          _routingPath = [];
+        });
+      }
+      // Pan + zoom
+      setState(() {
+        final newScale = (_baseScale * d.scale).clamp(0.05, 40.0);
+        final worldFocal = (_focalStart - _basePan) / _baseScale;
+        _scale = newScale;
+        _pan = d.localFocalPoint - worldFocal * newScale;
+      });
+    } else if (_routingFromId != null && _movingNodeId == null) {
+      // Edge routing: track hex path
+      final world = screenToWorld(d.localFocalPoint, _pan, _scale);
+      final hex = worldToHex(world);
+      final sourceNode = _nodeById(_routingFromId!);
+      setState(() {
+        _routingFinger = world;
+        if (sourceNode != null && hex != sourceNode.position) {
+          if (_routingPath.isEmpty || _routingPath.last != hex) {
+            _routingPath = [..._routingPath, hex];
+          }
+        }
+      });
+    }
+  }
+
+  void _onScaleEnd(ScaleEndDetails d) {
+    if (_routingFromId != null) {
+      // Check if finger released on a target node
+      final lastHex = _routingPath.isNotEmpty
+          ? _routingPath.last
+          : null;
+      if (lastHex != null) {
+        final target = _nodeAt(lastHex);
+        if (target != null && target.id != _routingFromId) {
+          // Waypoints = all path hexes except the final target hex
+          final waypoints = _routingPath.sublist(
+              0, _routingPath.length - 1);
+          _createEdge(_routingFromId!, target.id, waypoints);
+        }
+      }
+      setState(() {
+        _routingFromId = null;
+        _routingPath = [];
+      });
+    }
+  }
+
+  // ── Gesture: tap ──────────────────────────────────────────────────────────
+  void _onTapDown(TapDownDetails d) => _tapDownLocal = d.localPosition;
+
+  void _onTap() {
+    final world = screenToWorld(_tapDownLocal, _pan, _scale);
+    final hex = worldToHex(world);
+
+    if (_deleteMode) {
+      final node = _nodeAt(hex);
+      if (node != null) {
+        _deleteNode(node.id);
+      } else {
+        final edge = _edgeAt(hex);
+        if (edge != null) _deleteEdge(edge.id);
+      }
+      return;
+    }
+
+    final node = _nodeAt(hex);
+    if (node != null) {
+      _showNodePopup(node);
+      return;
+    }
+    final edge = _edgeAt(hex);
+    if (edge != null) {
+      _showEdgeMenu(edge);
+      return;
+    }
+    // Empty hex hint
+    _showHint(hex);
+  }
+
+  // ── Gesture: long press (create node or enter move mode) ──────────────────
+  void _onLongPressStart(LongPressStartDetails d) {
+    final world = screenToWorld(d.localPosition, _pan, _scale);
+    final hex = worldToHex(world);
+    final node = _nodeAt(hex);
+    if (node != null && !_deleteMode) {
+      setState(() {
+        _movingNodeId = node.id;
+        _moveOrigin = node.position;
+        _moveTarget = node.position;
+      });
+    } else if (node == null && !_deleteMode) {
+      _showNodeTypePicker(hex);
+    }
+  }
+
+  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails d) {
+    if (_movingNodeId == null) return;
+    final world = screenToWorld(d.localPosition, _pan, _scale);
+    final hex = worldToHex(world);
+    setState(() => _moveTarget = hex);
+  }
+
+  void _onLongPressEnd(LongPressEndDetails d) {
+    if (_movingNodeId != null && _moveTarget != null) {
+      final occupied = _nodeAt(_moveTarget!);
+      if (occupied == null || _moveTarget == _moveOrigin) {
+        _moveNode(_movingNodeId!, _moveTarget!);
+      }
+    }
+    setState(() {
+      _movingNodeId = null;
+      _moveOrigin = null;
+      _moveTarget = null;
+    });
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────────
+  void _showHint(HexPos hex) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Long-press to create a node here'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showNodeTypePicker(HexPos hex) async {
+    final type = await showModalBottomSheet<NodeType>(
+      context: context,
+      builder: (_) => const NodeTypePicker(),
+    );
+    if (type != null) _createNode(hex, type);
+  }
+
+  void _showNodePopup(Node node) async {
+    final worldCenter = hexToWorld(node.position);
+    final screenCenter = worldToScreen(worldCenter, _pan, _scale);
+
+    final box = context.findRenderObject()! as RenderBox;
+    final global = box.localToGlobal(screenCenter);
+
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          global.dx, global.dy - 80, global.dx + 1, global.dy),
+      items: [
+        const PopupMenuItem(value: 'copy', child: Text('Copy text')),
+        const PopupMenuItem(value: 'settings', child: Text('Settings')),
+        const PopupMenuItem(value: 'del_edges', child: Text('Delete all edges')),
+        const PopupMenuItem(value: 'delete', child: Text('Delete node')),
+        if (node.type == NodeType.api)
+          const PopupMenuItem(value: 'run', child: Text('Run')),
+      ],
+    );
+
+    switch (result) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: node.text));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Copied to clipboard'),
+              duration: Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      case 'settings':
+        _showNodeSettings(node);
+      case 'del_edges':
+        _deleteNodeEdges(node.id);
+      case 'delete':
+        _deleteNode(node.id);
+      case 'run':
+        _runApiNode(node);
+    }
+  }
+
+  void _showEdgeMenu(Edge edge) async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete edge'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == 'delete') _deleteEdge(edge.id);
+  }
+
+  void _showNodeSettings(Node node) {
+    if (node.type == NodeType.text) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => TextNodeSheet(
+          node: node,
+          incomingNodes: _edges
+              .where((e) => e.toId == node.id)
+              .map((e) => _nodeById(e.fromId))
+              .whereType<Node>()
+              .toList(),
+          buildInput: _buildInput,
+          onChanged: _updateNode,
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => ApiNodeSheet(
+          node: node,
+          settings: _settings,
+          buildInput: _buildInput,
+          onChanged: _updateNode,
+          onRun: _runApiNode,
+        ),
+      );
+    }
+  }
+
+  void _runApiNode(Node node) async {
+    final input = _buildInput(node);
+    if (input.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No input text to send')),
+      );
+      return;
+    }
+    _updateNode(node.copyWith(status: NodeStatus.running));
+    // Actual HTTP call delegated to ApiNodeSheet / api_runner.dart (Phase 2)
+    // For now simulate with a short delay
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    _updateNode(node.copyWith(
+      status: NodeStatus.done,
+      text: '[result placeholder]',
+    ));
+    _propagateApiResult(_nodeById(node.id)!);
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top bar
+            _TopBar(
+              deleteMode: _deleteMode,
+              canUndo: _undoStack.isNotEmpty,
+              onUndo: _undo,
+              onToggleDelete: () =>
+                  setState(() => _deleteMode = !_deleteMode),
+              onSettings: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => SettingsSheet(
+                  settings: _settings,
+                  onChanged: () => setState(() {}),
+                ),
+              ),
+            ),
+            // Canvas
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: _onTapDown,
+                onTap: _onTap,
+                onLongPressStart: _onLongPressStart,
+                onLongPressMoveUpdate: _onLongPressMoveUpdate,
+                onLongPressEnd: _onLongPressEnd,
+                onScaleStart: _onScaleStart,
+                onScaleUpdate: _onScaleUpdate,
+                onScaleEnd: _onScaleEnd,
+                child: Stack(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _pulseAnim,
+                      builder: (_, __) => RepaintBoundary(
+                        child: CustomPaint(
+                          painter: HexPainter(
+                            pan: _pan,
+                            scale: _scale,
+                            nodes: _nodes,
+                            edges: _edges,
+                            pulse: _pulseAnim.value,
+                            routing: _routingFromId != null
+                                ? RoutingState(
+                                    fromNodeId: _routingFromId!,
+                                    path: _routingPath,
+                                    fingerWorld: _routingFinger,
+                                  )
+                                : null,
+                            movingNodeId: _movingNodeId,
+                            moveTarget: _moveTarget,
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    ),
+                    // Frame time overlay
+                    Positioned(
+                      top: 8,
+                      right: 12,
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _frameMs,
+                        builder: (_, ms, __) => _FrameOverlay(ms: ms),
+                      ),
+                    ),
+                    // Delete mode banner
+                    if (_deleteMode)
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Delete mode — tap to delete',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Top bar ────────────────────────────────────────────────────────────────
+class _TopBar extends StatelessWidget {
+  final bool deleteMode;
+  final bool canUndo;
+  final VoidCallback onUndo;
+  final VoidCallback onToggleDelete;
+  final VoidCallback onSettings;
+
+  const _TopBar({
+    required this.deleteMode,
+    required this.canUndo,
+    required this.onUndo,
+    required this.onToggleDelete,
+    required this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.undo),
+            onPressed: canUndo ? onUndo : null,
+            tooltip: 'Undo',
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_sweep,
+                color: deleteMode ? Colors.red : null),
+            onPressed: onToggleDelete,
+            tooltip: 'Delete mode',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: onSettings,
+            tooltip: 'Settings',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Frame time overlay ─────────────────────────────────────────────────────
+class _FrameOverlay extends StatelessWidget {
+  final double ms;
+  const _FrameOverlay({required this.ms});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ms <= 16.7
+        ? Colors.greenAccent
+        : ms <= 33.3
+            ? Colors.orange
+            : Colors.redAccent;
+    final fps = ms > 0 ? (1000 / ms).round() : 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+            color: color, fontSize: 11, fontFamily: 'monospace',
+            decoration: TextDecoration.none),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text('${ms.toStringAsFixed(1)} ms'),
+            Text('$fps fps'),
+          ],
+        ),
+      ),
+    );
+  }
+}

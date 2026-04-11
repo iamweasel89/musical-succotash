@@ -1,5 +1,5 @@
 name: hex_canvas_mobile
-description: Hexagonal grid canvas with pinch-to-zoom and two-finger pan.
+description: Hexagonal canvas with nodes, edges, pan and zoom.
 version: 1.0.0+1
 publish_to: none
 
@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  uuid: ^4.3.0
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
