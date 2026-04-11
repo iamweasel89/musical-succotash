@@ -261,7 +261,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
   // Delegate to the per-node settings stored in api_node_sheet.dart
   ApiNodeSettings _settingsFor(Node node) =>
-      _nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
+      nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
 
   // Propagate api node result to all downstream nodes
   void _propagateApiResult(Node apiNode) {

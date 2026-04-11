@@ -27,10 +27,10 @@ class ApiNodeSettings {
 }
 
 // Store per-node settings alongside the node (keyed by node id)
-final _nodeApiSettings = <String, ApiNodeSettings>{};
+final nodeApiSettings = <String, ApiNodeSettings>{};
 
 ApiNodeSettings _settingsFor(Node node) =>
-    _nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
+    nodeApiSettings.putIfAbsent(node.id, () => ApiNodeSettings());
 
 class ApiNodeSheet extends StatefulWidget {
   final Node node;
