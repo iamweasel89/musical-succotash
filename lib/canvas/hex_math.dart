@@ -5,10 +5,10 @@ import 'package:flutter/painting.dart';
 import '../models/hex_pos.dart';
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const double hexR = 40.0; // circumradius (world-space pixels)
-const double nodeR = 20.0; // node circle radius  = 0.5 * hexR
-const double ringR = 25.0; // status ring radius
-const double ringW = 4.0; // status ring stroke width
+const double hexR = 40.0;  // circumradius (world-space pixels)
+const double nodeR = 10.0;  // node circle radius
+const double ringR = 17.5;  // status ring centre (inner=nodeR=10, outer=25)
+const double ringW = 15.0;  // status ring stroke width
 const double sqrt3 = 1.7320508075688772935;
 
 // ── Pre-computed vertex offsets for flat-top hex ───────────────────────────
