@@ -3,65 +3,57 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Фильтры видео с камеры</title>
+  <title>Выделение объектов по цвету</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container">
-    <h1>Фильтры видео с камеры</h1>
+    <h1>Выделение объектов по цвету</h1>
 
     <div class="video-wrapper">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="canvas"></canvas>
+      <div class="placeholder" id="placeholder">
+        <span>Нажмите «Включить камеру»</span>
+      </div>
     </div>
 
     <div class="controls">
-      <div class="filter-buttons">
-        <button class="filter-btn active" data-filter="none">Без фильтра</button>
-        <button class="filter-btn" data-filter="grayscale">Ч/Б</button>
-        <button class="filter-btn" data-filter="sepia">Сепия</button>
-        <button class="filter-btn" data-filter="invert">Инверсия</button>
-        <button class="filter-btn" data-filter="blur">Размытие</button>
-        <button class="filter-btn" data-filter="saturate">Насыщенность</button>
-        <button class="filter-btn" data-filter="hue-rotate">Смещение оттенка</button>
-        <button class="filter-btn" data-filter="pixelate">Пикселизация</button>
-      </div>
-
-      <div class="sliders" id="sliders">
-        <div class="slider-row" data-for="brightness">
-          <label>Яркость <span class="val">100%</span></label>
-          <input type="range" id="brightness" min="0" max="200" value="100" />
-        </div>
-        <div class="slider-row" data-for="contrast">
-          <label>Контраст <span class="val">100%</span></label>
-          <input type="range" id="contrast" min="0" max="200" value="100" />
-        </div>
-        <div class="slider-row" data-for="saturation">
-          <label>Насыщенность <span class="val">100%</span></label>
-          <input type="range" id="saturation" min="0" max="200" value="100" />
-        </div>
-        <div class="slider-row" data-for="hue">
-          <label>Оттенок <span class="val">0°</span></label>
-          <input type="range" id="hue" min="0" max="360" value="0" />
-        </div>
-        <div class="slider-row" data-for="blurAmount">
-          <label>Размытие <span class="val">0px</span></label>
-          <input type="range" id="blurAmount" min="0" max="20" value="0" />
-        </div>
-        <div class="slider-row" data-for="pixelSize">
-          <label>Размер пикселя <span class="val">1px</span></label>
-          <input type="range" id="pixelSize" min="1" max="32" value="1" />
-        </div>
-      </div>
-
+      <!-- Camera actions -->
       <div class="actions">
         <button id="startBtn">Включить камеру</button>
-        <button id="stopBtn" disabled>Выключить камеру</button>
-        <button id="snapshotBtn" disabled>Сделать снимок</button>
+        <button id="stopBtn" disabled>Выключить</button>
+        <button id="flipBtn" disabled>Перевернуть камеру</button>
+        <button id="pickBtn" disabled>Выбрать цвет</button>
+        <button id="clearBtn" disabled>Сбросить</button>
+      </div>
+
+      <!-- Hint -->
+      <p class="hint" id="hint"></p>
+
+      <!-- Picked color preview -->
+      <div class="color-row" id="colorRow" style="display:none">
+        <div class="color-preview" id="colorPreview"></div>
+        <span class="color-hex" id="colorHex">#000000</span>
+        <span class="color-label">— выбранный цвет</span>
+      </div>
+
+      <!-- Sliders -->
+      <div class="sliders">
+        <div class="slider-row">
+          <label>Допуск <span class="val" id="toleranceVal">40</span></label>
+          <input type="range" id="tolerance" min="1" max="150" value="40" />
+        </div>
+        <div class="slider-row">
+          <label>Интенсивность подсветки <span class="val" id="opacityVal">50%</span></label>
+          <input type="range" id="opacity" min="0" max="100" value="50" />
+        </div>
+        <div class="slider-row">
+          <label>Цвет подсветки</label>
+          <input type="color" id="highlightColor" value="#ffff00" />
+        </div>
       </div>
     </div>
-
-    <div id="snapshots" class="snapshots"></div>
   </div>
 
   <script src="app.js"></script>
