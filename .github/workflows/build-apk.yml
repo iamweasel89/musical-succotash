@@ -34,7 +34,9 @@ jobs:
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Copy web assets into Android project
-        run: cp index.html style.css app.js android/app/src/main/assets/
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp index.html style.css app.js android/app/src/main/assets/
 
       - name: Build debug APK
         run: gradle assembleDebug
