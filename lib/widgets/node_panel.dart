@@ -11,7 +11,7 @@ const _models = {
   'openai': ['gpt-4o'],
   'deepseek': ['deepseek-chat'],
 };
-const _maxTokenPresets = [256, 512, 1024, 2048, 4096];
+const _maxTokenPresets = [10, 20, 50, 100, 256, 512, 1024, 2048, 4096];
 const _tempPresets = [0.0, 0.3, 0.7, 1.0];
 
 class NodePanel extends StatefulWidget {
