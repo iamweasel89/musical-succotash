@@ -355,7 +355,9 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   // Effective text of a node: received slots + own text (for text nodes),
   // or just .text (for api nodes).
   String _effectiveText(Node node) {
-    if (node.type == NodeType.api) return node.text;
+    if (node.type == NodeType.api) {
+      return node.status == NodeStatus.error ? '' : node.text;
+    }
     final parts = <String>[
       ...node.received.values.where((t) => t.isNotEmpty),
       if (node.text.isNotEmpty) node.text,
