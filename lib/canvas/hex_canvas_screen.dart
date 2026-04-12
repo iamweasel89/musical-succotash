@@ -321,7 +321,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
           ..[fromId] = srcText;
         _updateNode(toNode.copyWith(
             received: newReceived, status: NodeStatus.done));
-        AppLogger.log('SLOT', '${fromId.substring(0, 8)} → ${toId.substring(0, 8)}: pushed ${srcText.length} chars');
+        AppLogger.log('SLOT', '${fromId.substring(0, 8)} → ${toId.substring(0, 8)}: ${srcText.length} chars\n$srcText');
       }
     }
     _saveState();
@@ -348,7 +348,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         ..[apiNode.id] = apiNode.text;
       _updateNode(
           target.copyWith(received: newReceived, status: NodeStatus.done));
-      AppLogger.log('SLOT', '${apiNode.id.substring(0, 8)} → ${target.id.substring(0, 8)}: pushed ${apiNode.text.length} chars');
+      AppLogger.log('SLOT', '${apiNode.id.substring(0, 8)} → ${target.id.substring(0, 8)}: ${apiNode.text.length} chars\n${apiNode.text}');
     }
   }
 
@@ -612,7 +612,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         'Run started: ${apiSettings.provider}/${apiSettings.model} '
         'max=${apiSettings.maxTokens} temp=${apiSettings.temperature} '
         'input=${input.length} chars\n'
-        'INPUT: ${input.length > 300 ? input.substring(0, 300) + "…" : input}');
+        'INPUT:\n$input');
 
     _updateNode(node.copyWith(status: NodeStatus.running, text: ''));
 
@@ -633,7 +633,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         AppLogger.log('API',
             'Complete: in=${stats.inputTokens} out=${stats.outputTokens} tok '
             '${stats.elapsed.inMilliseconds}ms\n'
-            'OUTPUT: ${result.length > 300 ? result.substring(0, 300) + "…" : result}');
+            'OUTPUT:\n$result');
         final updated = _nodeById(node.id)?.copyWith(
               status: NodeStatus.done,
               text: result,
