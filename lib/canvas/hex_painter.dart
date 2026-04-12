@@ -329,26 +329,6 @@ class HexPainter extends CustomPainter {
         ..strokeWidth = 1.5,
     );
 
-    // Name label
-    if (node.name.isNotEmpty) {
-      _drawLabel(canvas, c, node.name);
-    }
   }
-
-  void _drawLabel(Canvas canvas, Offset center, String text) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          fontSize: 11.0,
-          color: Colors.black87,
-          fontWeight: FontWeight.w500,
-          decoration: TextDecoration.none,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas,
-        center + Offset(-tp.width / 2, nodeR + 6));
-  }
+  // Labels are rendered as Flutter widgets in HexCanvasScreen, not here.
 }

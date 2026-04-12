@@ -816,6 +816,22 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                         ),
                       ),
                     ),
+                    // Node label overlay (Flutter text widgets — always crisp)
+                    IgnorePointer(
+                      child: ClipRect(
+                        child: Stack(
+                          children: [
+                            for (final node in _nodes)
+                              if (node.name.isNotEmpty)
+                                _NodeLabel(
+                                  node: node,
+                                  pan: _pan,
+                                  scale: _scale,
+                                ),
+                          ],
+                        ),
+                      ),
+                    ),
                     // Frame time overlay
                     Positioned(
                       top: 8,
@@ -853,6 +869,49 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Node label overlay widget ──────────────────────────────────────────────
+class _NodeLabel extends StatelessWidget {
+  final Node node;
+  final Offset pan;
+  final double scale;
+
+  const _NodeLabel({
+    required this.node,
+    required this.pan,
+    required this.scale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fontSize = 11.0 * scale;
+    if (fontSize < 4.0) return const SizedBox.shrink();
+
+    final worldCenter = hexToWorld(node.position);
+    final screenCenter = worldToScreen(worldCenter, pan, scale);
+    // Position label below the node's outer ring in screen space
+    final labelTop = screenCenter.dy + (ringR + ringW / 2 + 4) * scale;
+
+    return Positioned(
+      left: screenCenter.dx,
+      top: labelTop,
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, 0.0),
+        child: Text(
+          node.name,
+          style: TextStyle(
+            fontSize: fontSize,
+            color: Colors.black87,
+            fontWeight: FontWeight.w500,
+            decoration: TextDecoration.none,
+            height: 1.0,
+          ),
+          softWrap: false,
         ),
       ),
     );
