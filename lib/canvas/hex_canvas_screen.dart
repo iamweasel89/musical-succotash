@@ -369,15 +369,15 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   // For text nodes used as token-count display in sheet, returns _effectiveText.
   String _buildInput(Node node) {
     if (node.type == NodeType.text) return _effectiveText(node);
-    final parts = _edges
+    // For API nodes: collect effective text from upstream nodes only.
+    // node.text is the last response — it does NOT feed back into the next input.
+    return _edges
         .where((e) => e.toId == node.id)
         .map((e) => _nodeById(e.fromId))
         .whereType<Node>()
         .map(_effectiveText)
         .where((t) => t.isNotEmpty)
-        .toList();
-    if (node.text.isNotEmpty) parts.add(node.text);
-    return parts.join('\n\n');
+        .join('\n\n');
   }
 
   // ── Gesture: scale (pan/zoom + 1-finger routing) ──────────────────────────
@@ -610,11 +610,24 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     }
 
     final apiSettings = _settingsFor(node);
+
+    // Log each upstream source separately so own text is visible
+    final sources = _edges
+        .where((e) => e.toId == node.id)
+        .map((e) => _nodeById(e.fromId))
+        .whereType<Node>()
+        .toList();
+    final srcLog = sources.map((s) {
+      final label = s.name.isEmpty ? s.id.substring(0, 8) : s.name;
+      final t = _effectiveText(s);
+      return '  [${s.type.name}] $label (${t.length} chars):\n$t';
+    }).join('\n');
+
     AppLogger.log('API',
         'Run started: ${apiSettings.provider}/${apiSettings.model} '
-        'max=${apiSettings.maxTokens} temp=${apiSettings.temperature} '
-        'input=${input.length} chars\n'
-        'INPUT:\n$input');
+        'max=${apiSettings.maxTokens} temp=${apiSettings.temperature}\n'
+        'SOURCES (${sources.length}):\n$srcLog\n'
+        'FULL INPUT (${input.length} chars):\n$input');
 
     _updateNode(node.copyWith(status: NodeStatus.running, text: ''));
 
