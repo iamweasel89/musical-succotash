@@ -250,6 +250,7 @@ class _UpdateSectionState extends State<_UpdateSection> {
   void initState() {
     super.initState();
     AppUpdater.addListener(_refresh);
+    AppUpdater.resumePollingIfNeeded();
   }
 
   @override

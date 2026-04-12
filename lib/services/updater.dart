@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 // ── Update state ───────────────────────────────────────────────────────────
 enum UpdState { idle, checking, upToDate, available, downloading, ready, error }
@@ -21,8 +19,14 @@ class UpdateInfo {
   });
 }
 
+// DownloadManager status codes (mirrors Android constants)
+const _dmSuccessful = 8;
+const _dmFailed = 16;
+
 // ── Updater singleton ──────────────────────────────────────────────────────
-// All state is static so it survives bottom-sheet close/reopen.
+// All state is static — survives bottom-sheet close/reopen/backgrounding.
+// Download runs via Android DownloadManager (native), so backgrounding
+// does not interrupt it.
 class AppUpdater {
   static const _apiUrl =
       'https://api.github.com/repos/iamweasel89/musical-succotash/releases/latest';
@@ -34,12 +38,22 @@ class AppUpdater {
   static double progress = 0;
   static UpdateInfo? updateInfo;
   static File? downloadedFile;
+  static int? _downloadId;
+  static bool _polling = false;
 
-  static final List<VoidCallback> _listeners = [];
-  static void addListener(VoidCallback fn) => _listeners.add(fn);
-  static void removeListener(VoidCallback fn) => _listeners.remove(fn);
+  static final List<void Function()> _listeners = [];
+  static void addListener(void Function() fn) => _listeners.add(fn);
+  static void removeListener(void Function() fn) => _listeners.remove(fn);
   static void _notify() {
     for (final fn in List.of(_listeners)) fn();
+  }
+
+  /// Call when the update UI becomes visible (e.g. sheet reopened after
+  /// coming back from background) to resume progress polling.
+  static void resumePollingIfNeeded() {
+    if (state == UpdState.downloading && _downloadId != null && !_polling) {
+      _pollDownload();
+    }
   }
 
   // ── Public actions ────────────────────────────────────────────────────────
@@ -78,9 +92,7 @@ class AppUpdater {
       }
 
       final assets = json['assets'] as List<dynamic>;
-      if (assets.isEmpty) {
-        throw Exception('Release has no APK asset');
-      }
+      if (assets.isEmpty) throw Exception('Release has no APK asset');
       final downloadUrl = (assets.first as Map<String, dynamic>)
           ['browser_download_url'] as String;
 
@@ -102,36 +114,20 @@ class AppUpdater {
     if (updateInfo == null) return;
     state = UpdState.downloading;
     progress = 0;
+    _downloadId = null;
     _notify();
     try {
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/hex_canvas_update.apk');
-
-      final request = http.Request('GET', Uri.parse(updateInfo!.downloadUrl));
-      final response =
-          await request.send().timeout(const Duration(minutes: 5));
-
-      final total = response.contentLength ?? 0;
-      var received = 0;
-      final sink = file.openWrite();
-
-      await response.stream.listen((chunk) {
-        sink.add(chunk);
-        received += chunk.length;
-        if (total > 0) {
-          progress = received / total;
-          _notify();
-        }
-      }).asFuture<void>();
-
-      await sink.close();
-      downloadedFile = file;
-      state = UpdState.ready;
+      final id = await _channel.invokeMethod<int>(
+        'startDownload',
+        {'url': updateInfo!.downloadUrl},
+      );
+      _downloadId = id;
+      _pollDownload();
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
+      _notify();
     }
-    _notify();
   }
 
   static Future<void> install() async {
@@ -139,10 +135,60 @@ class AppUpdater {
     try {
       await _channel
           .invokeMethod<void>('installApk', {'path': downloadedFile!.path});
+      // OS takes over — reset so next open shows "Check for update"
+      state = UpdState.idle;
+      downloadedFile = null;
+      _downloadId = null;
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
-      _notify();
     }
+    _notify();
+  }
+
+  // ── Internal polling loop ─────────────────────────────────────────────────
+  static Future<void> _pollDownload() async {
+    if (_polling) return;
+    _polling = true;
+    try {
+      while (state == UpdState.downloading && _downloadId != null) {
+        await Future.delayed(const Duration(milliseconds: 700));
+
+        final raw = await _channel.invokeMethod<Map>(
+          'getDownloadStatus',
+          {'id': _downloadId},
+        );
+        if (raw == null) break;
+
+        final dmStatus = (raw['status'] as num).toInt();
+        final total = (raw['total'] as num).toInt();
+        final downloaded = (raw['downloaded'] as num).toInt();
+        final filePath = raw['filePath'] as String? ?? '';
+
+        if (dmStatus == _dmSuccessful) {
+          if (filePath.isNotEmpty) {
+            downloadedFile = File(filePath);
+            state = UpdState.ready;
+          } else {
+            state = UpdState.error;
+            message = 'Download complete but file path is empty';
+          }
+          break;
+        } else if (dmStatus == _dmFailed) {
+          state = UpdState.error;
+          message = 'Download failed (DownloadManager error)';
+          break;
+        } else {
+          // pending / running / paused — update progress
+          if (total > 0) progress = downloaded / total;
+        }
+        _notify();
+      }
+    } catch (e) {
+      state = UpdState.error;
+      message = e.toString();
+    }
+    _polling = false;
+    _notify();
   }
 }
