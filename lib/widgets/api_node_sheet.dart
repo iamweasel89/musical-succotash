@@ -19,8 +19,8 @@ class ApiNodeSettings {
   double temperature;
 
   ApiNodeSettings({
-    this.provider = 'anthropic',
-    this.model = 'claude-sonnet-4-5',
+    this.provider = 'deepseek',
+    this.model = 'deepseek-chat',
     this.maxTokens = 1024,
     this.temperature = 0.7,
   });

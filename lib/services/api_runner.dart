@@ -23,12 +23,16 @@ class RunStats {
 // ── Public entry point ─────────────────────────────────────────────────────
 /// Runs an API node and streams or awaits the result.
 ///
+/// [messages]   ordered conversation history (role/content pairs).
+///              If provided, takes precedence over [input].
+/// [input]      single-turn fallback (used by canvas).
 /// [onChunk]    called for each text delta (streaming mode).
 /// [onComplete] called once with the full result text + stats.
 /// [onError]    called on network/API error.
 Future<void> runApiNode({
   required Node node,
-  required String input,
+  String input = '',
+  List<Map<String, String>>? messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required void Function(String chunk) onChunk,
@@ -44,10 +48,12 @@ Future<void> runApiNode({
 
   final stopwatch = Stopwatch()..start();
 
+  final msgs = messages ?? [{'role': 'user', 'content': input}];
+
   try {
     if (settings.streamingMode) {
       await _runStreaming(
-        input: input,
+        messages: msgs,
         settings: settings,
         apiSettings: apiSettings,
         key: key,
@@ -64,7 +70,7 @@ Future<void> runApiNode({
       );
     } else {
       await _runFull(
-        input: input,
+        messages: msgs,
         settings: settings,
         apiSettings: apiSettings,
         key: key,
@@ -97,7 +103,7 @@ String _keyFor(String provider, GlobalSettings s) {
 
 // ── Full (non-streaming) ────────────────────────────────────────────────────
 Future<void> _runFull({
-  required String input,
+  required List<Map<String, String>> messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required String key,
@@ -105,7 +111,7 @@ Future<void> _runFull({
   required void Function(String error) onError,
 }) async {
   final (uri, headers, body) = _buildRequest(
-    input: input,
+    messages: messages,
     settings: settings,
     apiSettings: apiSettings,
     key: key,
@@ -128,7 +134,7 @@ Future<void> _runFull({
 
 // ── Streaming (SSE) ────────────────────────────────────────────────────────
 Future<void> _runStreaming({
-  required String input,
+  required List<Map<String, String>> messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required String key,
@@ -137,7 +143,7 @@ Future<void> _runStreaming({
   required void Function(String error) onError,
 }) async {
   final (uri, headers, body) = _buildRequest(
-    input: input,
+    messages: messages,
     settings: settings,
     apiSettings: apiSettings,
     key: key,
@@ -191,7 +197,7 @@ Future<void> _runStreaming({
 
 // ── Request builder ────────────────────────────────────────────────────────
 (Uri, Map<String, String>, Map<String, dynamic>) _buildRequest({
-  required String input,
+  required List<Map<String, String>> messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required String key,
@@ -213,9 +219,7 @@ Future<void> _runStreaming({
           'model': apiSettings.model,
           'max_tokens': apiSettings.maxTokens,
           if (systemPrompt.isNotEmpty) 'system': systemPrompt,
-          'messages': [
-            {'role': 'user', 'content': input}
-          ],
+          'messages': messages,
           if (stream) 'stream': true,
         },
       );
@@ -238,7 +242,7 @@ Future<void> _runStreaming({
           'messages': [
             if (systemPrompt.isNotEmpty)
               {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': input},
+            ...messages,
           ],
           if (stream) 'stream': true,
         },
