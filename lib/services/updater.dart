@@ -40,6 +40,7 @@ class AppUpdater {
   static File? downloadedFile;
   static int? _downloadId;
   static bool _polling = false;
+  static int _installedBuild = 0; // set when install is triggered
 
   static final List<void Function()> _listeners = [];
   static void addListener(void Function() fn) => _listeners.add(fn);
@@ -63,7 +64,11 @@ class AppUpdater {
     _notify();
     try {
       final pkgInfo = await PackageInfo.fromPlatform();
-      final currentBuild = int.tryParse(pkgInfo.buildNumber) ?? 0;
+      final packageBuild = int.tryParse(pkgInfo.buildNumber) ?? 0;
+      // Use the higher of the two: actual installed build (after restart)
+      // or the build we last triggered an install for (same session).
+      final currentBuild =
+          packageBuild > _installedBuild ? packageBuild : _installedBuild;
 
       final resp = await http
           .get(Uri.parse(_apiUrl), headers: {'Accept': 'application/json'})
@@ -135,7 +140,9 @@ class AppUpdater {
     try {
       await _channel
           .invokeMethod<void>('installApk', {'path': downloadedFile!.path});
-      // OS takes over — reset so next open shows "Check for update"
+      // Remember what we installed so check() doesn't offer it again
+      // before the app fully restarts with the new build number.
+      _installedBuild = updateInfo?.latestBuild ?? _installedBuild;
       state = UpdState.idle;
       downloadedFile = null;
       _downloadId = null;
