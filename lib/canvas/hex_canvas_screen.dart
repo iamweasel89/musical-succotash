@@ -11,11 +11,13 @@ import '../models/node.dart';
 import '../models/hex_pos.dart';
 import '../models/settings.dart';
 import '../services/api_runner.dart';
+import '../services/logger.dart';
 import '../widgets/node_type_picker.dart';
 import '../widgets/node_popup.dart';
 import '../widgets/settings_sheet.dart';
 import '../widgets/node_panel.dart';
 import '../widgets/api_node_sheet.dart';
+import '../widgets/log_sheet.dart';
 import 'hex_math.dart';
 import 'hex_painter.dart';
 
@@ -191,11 +193,14 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
   void _createNode(HexPos hex, NodeType type) {
     _snapshot();
-    setState(() => _nodes.add(Node(type: type, position: hex)));
+    final node = Node(type: type, position: hex);
+    setState(() => _nodes.add(node));
+    AppLogger.log('NODE', 'Created ${type.name} node ${node.id.substring(0, 8)}');
     _saveState();
   }
 
   void _deleteNode(String id) {
+    AppLogger.log('NODE', 'Deleted node ${id.substring(0, 8)}');
     _snapshot();
     // Clear this node's slot from any text nodes that received from it
     for (final n in _nodes) {
@@ -289,6 +294,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         final idx = _edges.indexOf(sameDir);
         _edges[idx] = sameDir.copyWith(waypoints: waypoints);
       });
+      AppLogger.log('EDGE', 'Rerouted ${fromId.substring(0, 8)} → ${toId.substring(0, 8)} (${waypoints.length} waypoints)');
       _saveState();
       return;
     }
@@ -302,6 +308,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     _snapshot();
     setState(
         () => _edges.add(Edge(fromId: fromId, toId: toId, waypoints: waypoints)));
+    AppLogger.log('EDGE', 'Created ${fromId.substring(0, 8)} → ${toId.substring(0, 8)}');
     // Push source text into target text-node slot on connection
     final fromNode = _nodeById(fromId);
     final toNode = _nodeById(toId);
@@ -314,6 +321,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
           ..[fromId] = srcText;
         _updateNode(toNode.copyWith(
             received: newReceived, status: NodeStatus.done));
+        AppLogger.log('SLOT', '${fromId.substring(0, 8)} → ${toId.substring(0, 8)}: pushed ${srcText.length} chars');
       }
     }
     _saveState();
@@ -340,6 +348,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         ..[apiNode.id] = apiNode.text;
       _updateNode(
           target.copyWith(received: newReceived, status: NodeStatus.done));
+      AppLogger.log('SLOT', '${apiNode.id.substring(0, 8)} → ${target.id.substring(0, 8)}: pushed ${apiNode.text.length} chars');
     }
   }
 
@@ -598,9 +607,14 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
       return;
     }
 
-    _updateNode(node.copyWith(status: NodeStatus.running, text: ''));
-
     final apiSettings = _settingsFor(node);
+    AppLogger.log('API',
+        'Run started: ${apiSettings.provider}/${apiSettings.model} '
+        'max=${apiSettings.maxTokens} temp=${apiSettings.temperature} '
+        'input=${input.length} chars\n'
+        'INPUT: ${input.length > 300 ? input.substring(0, 300) + "…" : input}');
+
+    _updateNode(node.copyWith(status: NodeStatus.running, text: ''));
 
     await runApiNode(
       node: node,
@@ -616,6 +630,10 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
       },
       onComplete: (result, stats) {
         if (!mounted) return;
+        AppLogger.log('API',
+            'Complete: in=${stats.inputTokens} out=${stats.outputTokens} tok '
+            '${stats.elapsed.inMilliseconds}ms\n'
+            'OUTPUT: ${result.length > 300 ? result.substring(0, 300) + "…" : result}');
         final updated = _nodeById(node.id)?.copyWith(
               status: NodeStatus.done,
               text: result,
@@ -623,12 +641,12 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         if (updated != null) {
           _updateNode(updated);
           _propagateApiResult(updated);
-          // Store last run stats for the sheet to display
           _lastRunStats[node.id] = stats;
         }
       },
       onError: (err) {
         if (!mounted) return;
+        AppLogger.log('API', 'Error: $err');
         final current = _nodeById(node.id);
         if (current != null) {
           _updateNode(current.copyWith(status: NodeStatus.error, text: err));
@@ -663,6 +681,11 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                   settings: _settings,
                   onChanged: () => setState(() {}),
                 ),
+              ),
+              onLog: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => const LogSheet(),
               ),
             ),
             // Canvas
@@ -751,6 +774,7 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onUndo;
   final VoidCallback onToggleDelete;
   final VoidCallback onSettings;
+  final VoidCallback onLog;
 
   const _TopBar({
     required this.deleteMode,
@@ -758,6 +782,7 @@ class _TopBar extends StatelessWidget {
     required this.onUndo,
     required this.onToggleDelete,
     required this.onSettings,
+    required this.onLog,
   });
 
   @override
@@ -783,6 +808,11 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.settings),
             onPressed: onSettings,
             tooltip: 'Settings',
+          ),
+          IconButton(
+            icon: const Icon(Icons.list_alt),
+            onPressed: onLog,
+            tooltip: 'Log',
           ),
         ],
       ),
