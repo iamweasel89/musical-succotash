@@ -21,6 +21,9 @@ class Node {
   /// disconnecting clears the slot.
   final Map<String, String> received;
 
+  final DateTime createdAt;
+  DateTime updatedAt;
+
   Node({
     String? id,
     this.name = '',
@@ -29,8 +32,12 @@ class Node {
     required this.position,
     this.text = '',
     Map<String, String>? received,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
-        received = received ?? {};
+        received = received ?? {},
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   Node copyWith({
     String? name,
@@ -38,6 +45,7 @@ class Node {
     HexPos? position,
     String? text,
     Map<String, String>? received,
+    DateTime? updatedAt,
   }) =>
       Node(
         id: id,
@@ -47,6 +55,8 @@ class Node {
         position: position ?? this.position,
         text: text ?? this.text,
         received: received ?? Map<String, String>.from(this.received),
+        createdAt: createdAt,
+        updatedAt: updatedAt ?? DateTime.now(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -57,6 +67,8 @@ class Node {
         'position': position.toJson(),
         'text': text,
         'received': received,
+        'createdAt': createdAt.millisecondsSinceEpoch,
+        'updatedAt': updatedAt.millisecondsSinceEpoch,
       };
 
   factory Node.fromJson(Map<String, dynamic> j) => Node(
@@ -69,5 +81,11 @@ class Node {
         received: (j['received'] as Map<String, dynamic>?)
                 ?.map((k, v) => MapEntry(k, v as String)) ??
             {},
+        createdAt: j['createdAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int)
+            : null,
+        updatedAt: j['updatedAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(j['updatedAt'] as int)
+            : null,
       );
 }
