@@ -336,12 +336,11 @@ class HexPainter extends CustomPainter {
   }
 
   void _drawLabel(Canvas canvas, Offset center, String text) {
-    final fs = 11.0 / scale;
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(
-          fontSize: fs,
+        style: const TextStyle(
+          fontSize: 11.0,
           color: Colors.black87,
           fontWeight: FontWeight.w500,
           decoration: TextDecoration.none,
@@ -350,6 +349,6 @@ class HexPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
     tp.paint(canvas,
-        center + Offset(-tp.width / 2, (nodeR + 6) / scale));
+        center + Offset(-tp.width / 2, nodeR + 6));
   }
 }
