@@ -1,5 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../models/settings.dart';
+import '../services/updater.dart';
 
 class SettingsSheet extends StatefulWidget {
   final GlobalSettings settings;
@@ -48,7 +53,6 @@ class _SettingsSheetState extends State<SettingsSheet> {
             const Text('Settings',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            // Show node labels
             _SwitchRow(
               label: 'Show node labels',
               value: s.showNodeLabels,
@@ -57,7 +61,6 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 _save();
               },
             ),
-            // Streaming mode
             _SwitchRow(
               label: 'Streaming mode',
               value: s.streamingMode,
@@ -67,7 +70,6 @@ class _SettingsSheetState extends State<SettingsSheet> {
               },
             ),
             const SizedBox(height: 12),
-            // Default system prompt
             const Text('Default system prompt',
                 style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
@@ -83,7 +85,7 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 _save();
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             // API keys submenu
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -99,6 +101,10 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 ),
               ),
             ),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // Update section
+            const _UpdateSection(),
           ],
         ),
       ),
@@ -230,5 +236,190 @@ class _KeyFieldState extends State<_KeyField> {
         onChanged: (_) => widget.onChanged(),
       ),
     );
+  }
+}
+
+// ── Update section ─────────────────────────────────────────────────────────
+enum _UpdState { idle, checking, upToDate, available, downloading, ready, error }
+
+class _UpdateSection extends StatefulWidget {
+  const _UpdateSection();
+
+  @override
+  State<_UpdateSection> createState() => _UpdateSectionState();
+}
+
+class _UpdateSectionState extends State<_UpdateSection> {
+  _UpdState _state = _UpdState.idle;
+  String _message = '';
+  double _progress = 0;
+  UpdateInfo? _updateInfo;
+  File? _downloadedFile;
+
+  Future<void> _check() async {
+    setState(() {
+      _state = _UpdState.checking;
+      _message = '';
+    });
+    try {
+      final info = await AppUpdater.checkForUpdate();
+      if (!mounted) return;
+      if (info == null) {
+        final pkg = await PackageInfo.fromPlatform();
+        setState(() {
+          _state = _UpdState.upToDate;
+          _message = 'Build ${pkg.buildNumber}';
+        });
+      } else {
+        setState(() {
+          _state = _UpdState.available;
+          _updateInfo = info;
+          _message = info.releaseName;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _state = _UpdState.error;
+        _message = e.toString();
+      });
+    }
+  }
+
+  Future<void> _download() async {
+    if (_updateInfo == null) return;
+    setState(() {
+      _state = _UpdState.downloading;
+      _progress = 0;
+    });
+    try {
+      final file = await AppUpdater.downloadApk(
+        _updateInfo!.downloadUrl,
+        (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _state = _UpdState.ready;
+        _downloadedFile = file;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _state = _UpdState.error;
+        _message = e.toString();
+      });
+    }
+  }
+
+  Future<void> _install() async {
+    if (_downloadedFile == null) return;
+    await AppUpdater.installApk(_downloadedFile!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Update',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        _buildBody(),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    switch (_state) {
+      case _UpdState.idle:
+        return OutlinedButton(
+          onPressed: _check,
+          child: const Text('Check for update'),
+        );
+
+      case _UpdState.checking:
+        return const Row(children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Text('Checking…', style: TextStyle(fontSize: 13)),
+        ]);
+
+      case _UpdState.upToDate:
+        return Row(children: [
+          const Icon(Icons.check_circle_outline,
+              color: Colors.green, size: 18),
+          const SizedBox(width: 6),
+          Text('$_message — up to date',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+          const SizedBox(width: 8),
+          TextButton(
+              onPressed: _check,
+              child: const Text('Re-check',
+                  style: TextStyle(fontSize: 12))),
+        ]);
+
+      case _UpdState.available:
+        return Row(children: [
+          Expanded(
+            child: Text('$_message available',
+                style: const TextStyle(fontSize: 13)),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonal(
+            onPressed: _download,
+            child: const Text('Download'),
+          ),
+        ]);
+
+      case _UpdState.downloading:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Downloading… ${(_progress * 100).round()}%',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 6),
+            LinearProgressIndicator(value: _progress),
+          ],
+        );
+
+      case _UpdState.ready:
+        return Row(children: [
+          const Icon(Icons.download_done, color: Colors.green, size: 18),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text('Downloaded',
+                style: TextStyle(fontSize: 13)),
+          ),
+          FilledButton(
+            onPressed: _install,
+            child: const Text('Install'),
+          ),
+        ]);
+
+      case _UpdState.error:
+        return Row(children: [
+          Expanded(
+            child: Text(
+              _message,
+              style:
+                  const TextStyle(fontSize: 12, color: Colors.red),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+              onPressed: _check,
+              child: const Text('Retry',
+                  style: TextStyle(fontSize: 12))),
+        ]);
+    }
   }
 }

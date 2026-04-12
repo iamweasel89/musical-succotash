@@ -23,8 +23,6 @@ jobs:
           channel: stable
           cache: true
 
-      # settings.gradle reads local.properties before Flutter can generate it,
-      # so we write it explicitly using the SDK path set by flutter-action.
       - name: Write android/local.properties
         run: |
           FLUTTER_SDK=$(dirname $(dirname $(which flutter)))
@@ -35,11 +33,21 @@ jobs:
         run: flutter pub get
 
       - name: Build APK (release)
-        run: flutter build apk --release
+        run: flutter build apk --release --build-number=${{ github.run_number }}
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: hex-canvas-mobile-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+
+      - name: Publish GitHub release
+        run: |
+          gh release create "build-${{ github.run_number }}" \
+            --title "Build ${{ github.run_number }}" \
+            --notes "Commit: ${{ github.sha }}" \
+            --latest \
+            build/app/outputs/flutter-apk/app-release.apk#hex-canvas.apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
