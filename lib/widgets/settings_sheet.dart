@@ -1,7 +1,4 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/settings.dart';
 import '../services/updater.dart';
@@ -240,8 +237,7 @@ class _KeyFieldState extends State<_KeyField> {
 }
 
 // ── Update section ─────────────────────────────────────────────────────────
-enum _UpdState { idle, checking, upToDate, available, downloading, ready, error }
-
+// Reads from AppUpdater static state — survives bottom-sheet close/reopen.
 class _UpdateSection extends StatefulWidget {
   const _UpdateSection();
 
@@ -250,72 +246,20 @@ class _UpdateSection extends StatefulWidget {
 }
 
 class _UpdateSectionState extends State<_UpdateSection> {
-  _UpdState _state = _UpdState.idle;
-  String _message = '';
-  double _progress = 0;
-  UpdateInfo? _updateInfo;
-  File? _downloadedFile;
-
-  Future<void> _check() async {
-    setState(() {
-      _state = _UpdState.checking;
-      _message = '';
-    });
-    try {
-      final info = await AppUpdater.checkForUpdate();
-      if (!mounted) return;
-      if (info == null) {
-        final pkg = await PackageInfo.fromPlatform();
-        setState(() {
-          _state = _UpdState.upToDate;
-          _message = 'Build ${pkg.buildNumber}';
-        });
-      } else {
-        setState(() {
-          _state = _UpdState.available;
-          _updateInfo = info;
-          _message = info.releaseName;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _state = _UpdState.error;
-        _message = e.toString();
-      });
-    }
+  @override
+  void initState() {
+    super.initState();
+    AppUpdater.addListener(_refresh);
   }
 
-  Future<void> _download() async {
-    if (_updateInfo == null) return;
-    setState(() {
-      _state = _UpdState.downloading;
-      _progress = 0;
-    });
-    try {
-      final file = await AppUpdater.downloadApk(
-        _updateInfo!.downloadUrl,
-        (p) {
-          if (mounted) setState(() => _progress = p);
-        },
-      );
-      if (!mounted) return;
-      setState(() {
-        _state = _UpdState.ready;
-        _downloadedFile = file;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _state = _UpdState.error;
-        _message = e.toString();
-      });
-    }
+  @override
+  void dispose() {
+    AppUpdater.removeListener(_refresh);
+    super.dispose();
   }
 
-  Future<void> _install() async {
-    if (_downloadedFile == null) return;
-    await AppUpdater.installApk(_downloadedFile!);
+  void _refresh() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -332,14 +276,14 @@ class _UpdateSectionState extends State<_UpdateSection> {
   }
 
   Widget _buildBody() {
-    switch (_state) {
-      case _UpdState.idle:
+    switch (AppUpdater.state) {
+      case UpdState.idle:
         return OutlinedButton(
-          onPressed: _check,
+          onPressed: AppUpdater.check,
           child: const Text('Check for update'),
         );
 
-      case _UpdState.checking:
+      case UpdState.checking:
         return const Row(children: [
           SizedBox(
             width: 18,
@@ -350,75 +294,76 @@ class _UpdateSectionState extends State<_UpdateSection> {
           Text('Checking…', style: TextStyle(fontSize: 13)),
         ]);
 
-      case _UpdState.upToDate:
+      case UpdState.upToDate:
         return Row(children: [
           const Icon(Icons.check_circle_outline,
               color: Colors.green, size: 18),
           const SizedBox(width: 6),
-          Text('$_message — up to date',
-              style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${AppUpdater.message} — up to date',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
+          ),
           TextButton(
-              onPressed: _check,
-              child: const Text('Re-check',
-                  style: TextStyle(fontSize: 12))),
+            onPressed: AppUpdater.check,
+            child: const Text('Re-check', style: TextStyle(fontSize: 12)),
+          ),
         ]);
 
-      case _UpdState.available:
+      case UpdState.available:
         return Row(children: [
           Expanded(
-            child: Text('$_message available',
+            child: Text('${AppUpdater.message} available',
                 style: const TextStyle(fontSize: 13)),
           ),
           const SizedBox(width: 8),
           FilledButton.tonal(
-            onPressed: _download,
+            onPressed: AppUpdater.download,
             child: const Text('Download'),
           ),
         ]);
 
-      case _UpdState.downloading:
+      case UpdState.downloading:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Downloading… ${(_progress * 100).round()}%',
+              'Downloading… ${(AppUpdater.progress * 100).round()}%',
               style: TextStyle(fontSize: 13, color: Colors.grey[600]),
             ),
             const SizedBox(height: 6),
-            LinearProgressIndicator(value: _progress),
+            LinearProgressIndicator(value: AppUpdater.progress),
           ],
         );
 
-      case _UpdState.ready:
+      case UpdState.ready:
         return Row(children: [
           const Icon(Icons.download_done, color: Colors.green, size: 18),
           const SizedBox(width: 6),
           const Expanded(
-            child: Text('Downloaded',
-                style: TextStyle(fontSize: 13)),
+            child: Text('Downloaded', style: TextStyle(fontSize: 13)),
           ),
           FilledButton(
-            onPressed: _install,
+            onPressed: AppUpdater.install,
             child: const Text('Install'),
           ),
         ]);
 
-      case _UpdState.error:
+      case UpdState.error:
         return Row(children: [
           Expanded(
             child: Text(
-              _message,
-              style:
-                  const TextStyle(fontSize: 12, color: Colors.red),
+              AppUpdater.message,
+              style: const TextStyle(fontSize: 12, color: Colors.red),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           TextButton(
-              onPressed: _check,
-              child: const Text('Retry',
-                  style: TextStyle(fontSize: 12))),
+            onPressed: AppUpdater.check,
+            child: const Text('Retry', style: TextStyle(fontSize: 12)),
+          ),
         ]);
     }
   }
