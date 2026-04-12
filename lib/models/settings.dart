@@ -4,6 +4,7 @@ class GlobalSettings {
   String deepSeekKey;
   String defaultSystemPrompt;
   bool streamingMode;
+  bool showNodeLabels;
 
   GlobalSettings({
     this.anthropicKey = '',
@@ -11,6 +12,7 @@ class GlobalSettings {
     this.deepSeekKey = '',
     this.defaultSystemPrompt = '',
     this.streamingMode = false,
+    this.showNodeLabels = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -19,6 +21,7 @@ class GlobalSettings {
         'deepSeekKey': deepSeekKey,
         'defaultSystemPrompt': defaultSystemPrompt,
         'streamingMode': streamingMode,
+        'showNodeLabels': showNodeLabels,
       };
 
   factory GlobalSettings.fromJson(Map<String, dynamic> j) => GlobalSettings(
@@ -27,5 +30,6 @@ class GlobalSettings {
         deepSeekKey: j['deepSeekKey'] as String? ?? '',
         defaultSystemPrompt: j['defaultSystemPrompt'] as String? ?? '',
         streamingMode: j['streamingMode'] as bool? ?? false,
+        showNodeLabels: j['showNodeLabels'] as bool? ?? true,
       );
 }

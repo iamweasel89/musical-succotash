@@ -137,6 +137,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         _settings.deepSeekKey = s.deepSeekKey;
         _settings.defaultSystemPrompt = s.defaultSystemPrompt;
         _settings.streamingMode = s.streamingMode;
+        _settings.showNodeLabels = s.showNodeLabels;
       }
     } catch (_) {
       // Corrupt state — start fresh
@@ -817,21 +818,22 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                       ),
                     ),
                     // Node label overlay (Flutter text widgets — always crisp)
-                    IgnorePointer(
-                      child: ClipRect(
-                        child: Stack(
-                          children: [
-                            for (final node in _nodes)
-                              if (node.name.isNotEmpty)
-                                _NodeLabel(
-                                  node: node,
-                                  pan: _pan,
-                                  scale: _scale,
-                                ),
-                          ],
+                    if (_settings.showNodeLabels)
+                      IgnorePointer(
+                        child: ClipRect(
+                          child: Stack(
+                            children: [
+                              for (final node in _nodes)
+                                if (node.name.isNotEmpty)
+                                  _NodeLabel(
+                                    node: node,
+                                    pan: _pan,
+                                    scale: _scale,
+                                  ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                     // Frame time overlay
                     Positioned(
                       top: 8,
