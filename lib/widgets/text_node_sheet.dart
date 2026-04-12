@@ -160,7 +160,7 @@ class _IncomingTile extends StatelessWidget {
           radius: 14,
           backgroundColor: node.type == NodeType.text
               ? const Color(0xFF2196F3)
-              : const Color(0xFFF44336),
+              : const Color(0xFF7B1FA2),
         ),
         title: Text(node.name.isEmpty ? '(unnamed)' : node.name,
             style: const TextStyle(fontSize: 13)),

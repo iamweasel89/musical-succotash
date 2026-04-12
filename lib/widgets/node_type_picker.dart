@@ -28,7 +28,7 @@ class NodeTypePicker extends StatelessWidget {
             ),
             ListTile(
               leading: const CircleAvatar(
-                backgroundColor: Color(0xFFF44336),
+                backgroundColor: Color(0xFF7B1FA2),
                 child: Icon(Icons.api, color: Colors.white, size: 20),
               ),
               title: const Text('API Node'),

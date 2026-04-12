@@ -22,7 +22,7 @@ class RoutingState {
 
 // ── Colours ────────────────────────────────────────────────────────────────
 Color nodeColor(NodeType t) =>
-    t == NodeType.text ? const Color(0xFF2196F3) : const Color(0xFFF44336);
+    t == NodeType.text ? const Color(0xFF2196F3) : const Color(0xFF7B1FA2);
 
 Color statusRingColor(NodeStatus s, double pulse) {
   switch (s) {

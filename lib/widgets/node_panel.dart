@@ -117,7 +117,7 @@ class _NodePanelState extends State<NodePanel> {
                     decoration: BoxDecoration(
                       color: isText
                           ? const Color(0xFF2196F3)
-                          : const Color(0xFFF44336),
+                          : const Color(0xFF7B1FA2),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -419,7 +419,7 @@ class _ReceivedSlot extends StatelessWidget {
               margin: const EdgeInsets.only(right: 6),
               decoration: BoxDecoration(
                 color: sourceIsApi
-                    ? const Color(0xFFF44336)
+                    ? const Color(0xFF7B1FA2)
                     : const Color(0xFF2196F3),
                 shape: BoxShape.circle,
               ),
