@@ -46,6 +46,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   double _baseScale = 1.0;
   Offset _basePan = Offset.zero;
   Offset _focalStart = Offset.zero;
+  Size _canvasSize = Size.zero;
 
   // ── Data ──────────────────────────────────────────────────────────────────
   final List<Node> _nodes = [];
@@ -406,6 +407,49 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
         .join('\n\n');
   }
 
+  // ── Navigation helpers ────────────────────────────────────────────────────
+  void _centerOnOrigin() {
+    setState(() {
+      _pan = Offset(_canvasSize.width / 2, _canvasSize.height / 2);
+    });
+  }
+
+  void _fitAll() {
+    if (_nodes.isEmpty) {
+      _centerOnOrigin();
+      return;
+    }
+    final centers = _nodes.map((n) => hexToWorld(n.position)).toList();
+    double left = centers.first.dx, right = centers.first.dx;
+    double top = centers.first.dy, bottom = centers.first.dy;
+    for (final c in centers) {
+      if (c.dx < left) left = c.dx;
+      if (c.dx > right) right = c.dx;
+      if (c.dy < top) top = c.dy;
+      if (c.dy > bottom) bottom = c.dy;
+    }
+    // Add padding equal to node outer edge + extra margin
+    const pad = ringR + ringW / 2 + 40.0;
+    left -= pad;
+    right += pad;
+    top -= pad;
+    bottom += pad;
+    final bboxW = right - left;
+    final bboxH = bottom - top;
+    final sw = _canvasSize.width;
+    final sh = _canvasSize.height;
+    if (sw <= 0 || sh <= 0 || bboxW <= 0 || bboxH <= 0) return;
+    final newScale =
+        ((sw / bboxW) < (sh / bboxH) ? (sw / bboxW) : (sh / bboxH))
+            .clamp(0.05, 40.0);
+    final worldCx = (left + right) / 2;
+    final worldCy = (top + bottom) / 2;
+    setState(() {
+      _scale = newScale;
+      _pan = Offset(sw / 2 - worldCx * newScale, sh / 2 - worldCy * newScale);
+    });
+  }
+
   // ── Gesture: scale (pan/zoom + 1-finger routing) ──────────────────────────
   void _onScaleStart(ScaleStartDetails d) {
     // If second finger arrives during routing → cancel routing
@@ -715,6 +759,8 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
               onUndo: _undo,
               onToggleDelete: () =>
                   setState(() => _deleteMode = !_deleteMode),
+              onFitAll: _fitAll,
+              onCenterOrigin: _centerOnOrigin,
               onSettings: () => showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
@@ -731,7 +777,10 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
             ),
             // Canvas
             Expanded(
-              child: GestureDetector(
+              child: LayoutBuilder(
+                builder: (_, constraints) {
+                  _canvasSize = constraints.biggest;
+                  return GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: _onTapDown,
                 onTap: _onTap,
@@ -799,6 +848,8 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                       ),
                   ],
                 ),
+              );
+                },
               ),
             ),
           ],
@@ -816,6 +867,8 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onToggleDelete;
   final VoidCallback onSettings;
   final VoidCallback onLog;
+  final VoidCallback onFitAll;
+  final VoidCallback onCenterOrigin;
 
   const _TopBar({
     required this.deleteMode,
@@ -824,6 +877,8 @@ class _TopBar extends StatelessWidget {
     required this.onToggleDelete,
     required this.onSettings,
     required this.onLog,
+    required this.onFitAll,
+    required this.onCenterOrigin,
   });
 
   @override
@@ -844,6 +899,16 @@ class _TopBar extends StatelessWidget {
                 color: deleteMode ? Colors.red : null),
             onPressed: onToggleDelete,
             tooltip: 'Delete mode',
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_out_map),
+            onPressed: onFitAll,
+            tooltip: 'Fit all nodes',
+          ),
+          IconButton(
+            icon: const Icon(Icons.center_focus_strong),
+            onPressed: onCenterOrigin,
+            tooltip: 'Center on origin',
           ),
           IconButton(
             icon: const Icon(Icons.settings),
