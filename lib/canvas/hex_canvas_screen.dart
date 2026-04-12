@@ -14,7 +14,7 @@ import '../services/api_runner.dart';
 import '../widgets/node_type_picker.dart';
 import '../widgets/node_popup.dart';
 import '../widgets/settings_sheet.dart';
-import '../widgets/text_node_sheet.dart';
+import '../widgets/node_panel.dart';
 import '../widgets/api_node_sheet.dart';
 import 'hex_math.dart';
 import 'hex_painter.dart';
@@ -458,7 +458,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
     final node = _nodeAt(hex);
     if (node != null) {
-      _showNodePopup(node);
+      _showNodePanel(node);
       return;
     }
     final edge = _edgeAt(hex);
@@ -526,55 +526,34 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     if (type != null) _createNode(hex, type);
   }
 
-  void _showNodePopup(Node node) async {
-    final worldCenter = hexToWorld(node.position);
-    final screenCenter = worldToScreen(worldCenter, _pan, _scale);
+  void _showNodePanel(Node node) {
+    final incomingNodes = _edges
+        .where((e) => e.toId == node.id)
+        .map((e) => _nodeById(e.fromId))
+        .whereType<Node>()
+        .toList();
 
-    final box = context.findRenderObject()! as RenderBox;
-    final global = box.localToGlobal(screenCenter);
-
-    final result = await showMenu<String>(
+    showModalBottomSheet(
       context: context,
-      position: RelativeRect.fromLTRB(
-          global.dx, global.dy - 80, global.dx + 1, global.dy),
-      items: [
-        const PopupMenuItem(value: 'copy', child: Text('Copy text')),
-        const PopupMenuItem(value: 'settings', child: Text('Settings')),
-        if (node.type == NodeType.text)
-          const PopupMenuItem(value: 'clear', child: Text('Clear text')),
-        const PopupMenuItem(value: 'del_edges', child: Text('Delete all edges')),
-        const PopupMenuItem(value: 'delete', child: Text('Delete node')),
-        if (node.type == NodeType.api)
-          const PopupMenuItem(value: 'run', child: Text('Run')),
-      ],
+      isScrollControlled: true,
+      builder: (_) => NodePanel(
+        node: node,
+        effectiveText: _effectiveText(node),
+        inputText: _buildInput(node),
+        incomingNodes: incomingNodes,
+        lastRunStats: _lastRunStats[node.id],
+        onChanged: _updateNode,
+        onRun: _runApiNode,
+        onClear: () {
+          _snapshot();
+          final newStatus =
+              node.received.isEmpty ? NodeStatus.idle : node.status;
+          _updateNode(node.copyWith(text: '', status: newStatus));
+        },
+        onDeleteEdges: () => _deleteNodeEdges(node.id),
+        onDelete: () => _deleteNode(node.id),
+      ),
     );
-
-    switch (result) {
-      case 'copy':
-        await Clipboard.setData(ClipboardData(text: node.text));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Copied to clipboard'),
-              duration: Duration(seconds: 1),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      case 'settings':
-        _showNodeSettings(node);
-      case 'clear':
-        _snapshot();
-        final newStatus =
-            node.received.isEmpty ? NodeStatus.idle : node.status;
-        _updateNode(node.copyWith(text: '', status: newStatus));
-      case 'del_edges':
-        _deleteNodeEdges(node.id);
-      case 'delete':
-        _deleteNode(node.id);
-      case 'run':
-        _runApiNode(node);
-    }
   }
 
   void _showEdgeMenu(Edge edge) async {
@@ -594,38 +573,6 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
       ),
     );
     if (result == 'delete') _deleteEdge(edge.id);
-  }
-
-  void _showNodeSettings(Node node) {
-    if (node.type == NodeType.text) {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => TextNodeSheet(
-          node: node,
-          incomingNodes: _edges
-              .where((e) => e.toId == node.id)
-              .map((e) => _nodeById(e.fromId))
-              .whereType<Node>()
-              .toList(),
-          buildInput: _buildInput,
-          onChanged: _updateNode,
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => ApiNodeSheet(
-          node: node,
-          settings: _settings,
-          buildInput: _buildInput,
-          onChanged: _updateNode,
-          onRun: _runApiNode,
-          lastRunStats: _lastRunStats[node.id],
-        ),
-      );
-    }
   }
 
   void _runApiNode(Node node) async {
