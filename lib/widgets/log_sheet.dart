@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/logger.dart';
 
 class LogSheet extends StatefulWidget {
-  const LogSheet({super.key});
+  final VoidCallback onDump;
+  const LogSheet({super.key, required this.onDump});
 
   @override
   State<LogSheet> createState() => _LogSheetState();
@@ -60,6 +61,11 @@ class _LogSheetState extends State<LogSheet> {
                     style: TextStyle(
                         fontSize: 13, color: Colors.grey[500])),
                 const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                  label: const Text('Dump'),
+                  onPressed: widget.onDump,
+                ),
                 TextButton.icon(
                   icon: const Icon(Icons.copy, size: 16),
                   label: const Text('Copy all'),

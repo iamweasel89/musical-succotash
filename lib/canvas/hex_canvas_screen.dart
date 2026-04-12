@@ -140,6 +140,32 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     } catch (_) {
       // Corrupt state — start fresh
     }
+    _logDump(prefix: 'LOADED');
+  }
+
+  void _logDump({String prefix = 'DUMP'}) {
+    if (_nodes.isEmpty && _edges.isEmpty) {
+      AppLogger.log('NODE', '$prefix: canvas is empty');
+      return;
+    }
+    for (final n in _nodes) {
+      final label = n.name.isEmpty ? n.id.substring(0, 8) : n.name;
+      final ownLen = n.text.length;
+      final recvLen = n.received.values.fold(0, (s, t) => s + t.length);
+      final buf = StringBuffer();
+      buf.write('$prefix [${n.type.name}] $label  status=${n.status.name}');
+      if (n.text.isNotEmpty) buf.write('\n  own (${ownLen}c): ${n.text}');
+      for (final e in n.received.entries) {
+        buf.write('\n  slot[${e.key.substring(0, 8)}] (${e.value.length}c): ${e.value}');
+      }
+      if (ownLen == 0 && recvLen == 0) buf.write('  (empty)');
+      AppLogger.log('NODE', buf.toString());
+    }
+    for (final e in _edges) {
+      AppLogger.log('EDGE',
+          '$prefix ${e.fromId.substring(0, 8)} → ${e.toId.substring(0, 8)}'
+          '  waypoints=${e.waypoints.length}');
+    }
   }
 
   void _onTimings(List<FrameTiming> t) {
@@ -700,7 +726,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
               onLog: () => showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => const LogSheet(),
+                builder: (_) => LogSheet(onDump: () => _logDump()),
               ),
             ),
             // Canvas
