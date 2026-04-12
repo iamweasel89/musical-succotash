@@ -59,6 +59,8 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
 
   // ── UI mode ───────────────────────────────────────────────────────────────
   bool _deleteMode = false;
+  bool _chainMode = false;
+  final Set<String> _chainSelection = {};
 
   // ── API run stats (per node id) ───────────────────────────────────────────
   final Map<String, RunStats> _lastRunStats = {};
@@ -451,6 +453,59 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
     });
   }
 
+  // ── Chain selection mode ──────────────────────────────────────────────────
+  void _toggleChainMode() {
+    setState(() {
+      _chainMode = !_chainMode;
+      if (_chainMode) _deleteMode = false;
+      if (!_chainMode) _chainSelection.clear();
+    });
+  }
+
+  List<Node> _topoSortSelection() {
+    if (_chainSelection.isEmpty) return [];
+    final ids = Set<String>.from(_chainSelection);
+
+    final inDegree = <String, int>{for (final id in ids) id: 0};
+    final outEdges = <String, List<String>>{for (final id in ids) id: []};
+    for (final e in _edges) {
+      if (ids.contains(e.fromId) && ids.contains(e.toId)) {
+        outEdges[e.fromId]!.add(e.toId);
+        inDegree[e.toId] = inDegree[e.toId]! + 1;
+      }
+    }
+
+    List<Node> byNameId(Iterable<String> nodeIds) => nodeIds
+        .map(_nodeById)
+        .whereType<Node>()
+        .toList()
+      ..sort((a, b) {
+        final c = a.name.compareTo(b.name);
+        return c != 0 ? c : a.id.compareTo(b.id);
+      });
+
+    final queue = byNameId(ids.where((id) => inDegree[id] == 0));
+    final sorted = <Node>[];
+
+    while (queue.isNotEmpty) {
+      final node = queue.removeAt(0);
+      sorted.add(node);
+      final readyNext = <String>[];
+      for (final nextId in outEdges[node.id]!) {
+        inDegree[nextId] = inDegree[nextId]! - 1;
+        if (inDegree[nextId] == 0) readyNext.add(nextId);
+      }
+      queue.addAll(byNameId(readyNext));
+    }
+
+    if (sorted.length < ids.length) {
+      final seen = sorted.map((n) => n.id).toSet();
+      sorted.addAll(byNameId(ids.where((id) => !seen.contains(id))));
+    }
+
+    return sorted;
+  }
+
   // ── Gesture: scale (pan/zoom + 1-finger routing) ──────────────────────────
   void _onScaleStart(ScaleStartDetails d) {
     // If second finger arrives during routing → cancel routing
@@ -539,6 +594,20 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   void _onTap() {
     final world = screenToWorld(_tapDownLocal, _pan, _scale);
     final hex = worldToHex(world);
+
+    if (_chainMode) {
+      final node = _nodeAt(hex);
+      if (node != null) {
+        setState(() {
+          if (_chainSelection.contains(node.id)) {
+            _chainSelection.remove(node.id);
+          } else {
+            _chainSelection.add(node.id);
+          }
+        });
+      }
+      return;
+    }
 
     if (_deleteMode) {
       final node = _nodeAt(hex);
@@ -748,6 +817,9 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final chainNodes = _chainMode ? _topoSortSelection() : <Node>[];
+    final chainHasCycle =
+        _chainMode && chainNodes.length < _chainSelection.length;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -756,10 +828,17 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
             // Top bar
             _TopBar(
               deleteMode: _deleteMode,
+              chainMode: _chainMode,
               canUndo: _undoStack.isNotEmpty,
               onUndo: _undo,
-              onToggleDelete: () =>
-                  setState(() => _deleteMode = !_deleteMode),
+              onToggleDelete: () => setState(() {
+                _deleteMode = !_deleteMode;
+                if (_deleteMode) {
+                  _chainMode = false;
+                  _chainSelection.clear();
+                }
+              }),
+              onToggleChain: _toggleChainMode,
               onFitAll: _fitAll,
               onCenterOrigin: _centerOnOrigin,
               onSettings: () => showModalBottomSheet(
@@ -812,6 +891,9 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                                 : null,
                             movingNodeId: _movingNodeId,
                             moveTarget: _moveTarget,
+                            selectedIds: _chainMode
+                                ? Set.unmodifiable(_chainSelection)
+                                : const {},
                           ),
                           child: const SizedBox.expand(),
                         ),
@@ -863,6 +945,12 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                             ),
                           ),
                         ),
+                      ),
+                    // Chain mode dialogue panel
+                    if (_chainMode)
+                      _ChainPanel(
+                        nodes: chainNodes,
+                        hasCycle: chainHasCycle,
                       ),
                   ],
                 ),
@@ -923,9 +1011,11 @@ class _NodeLabel extends StatelessWidget {
 // ── Top bar ────────────────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final bool deleteMode;
+  final bool chainMode;
   final bool canUndo;
   final VoidCallback onUndo;
   final VoidCallback onToggleDelete;
+  final VoidCallback onToggleChain;
   final VoidCallback onSettings;
   final VoidCallback onLog;
   final VoidCallback onFitAll;
@@ -933,9 +1023,11 @@ class _TopBar extends StatelessWidget {
 
   const _TopBar({
     required this.deleteMode,
+    required this.chainMode,
     required this.canUndo,
     required this.onUndo,
     required this.onToggleDelete,
+    required this.onToggleChain,
     required this.onSettings,
     required this.onLog,
     required this.onFitAll,
@@ -962,6 +1054,12 @@ class _TopBar extends StatelessWidget {
             tooltip: 'Delete mode',
           ),
           IconButton(
+            icon: Icon(Icons.forum,
+                color: chainMode ? Colors.amber[700] : null),
+            onPressed: onToggleChain,
+            tooltip: 'Chain dialogue',
+          ),
+          IconButton(
             icon: const Icon(Icons.zoom_out_map),
             onPressed: onFitAll,
             tooltip: 'Fit all nodes',
@@ -980,6 +1078,150 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.list_alt),
             onPressed: onLog,
             tooltip: 'Log',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Chain dialogue panel ───────────────────────────────────────────────────
+class _ChainPanel extends StatelessWidget {
+  final List<Node> nodes;
+  final bool hasCycle;
+
+  const _ChainPanel({required this.nodes, required this.hasCycle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 260),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: const [
+            BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, -2)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            if (hasCycle)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: Colors.amber[700], size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Цикл обнаружен — порядок приближённый',
+                      style: TextStyle(fontSize: 12, color: Colors.amber[700]),
+                    ),
+                  ],
+                ),
+              ),
+            Flexible(
+              child: nodes.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Text(
+                        'Нажмите на ноды, чтобы построить цепочку',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      itemCount: nodes.length,
+                      itemBuilder: (_, i) => _ChatBubble(node: nodes[i]),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Chat bubble ────────────────────────────────────────────────────────────
+class _ChatBubble extends StatelessWidget {
+  final Node node;
+  const _ChatBubble({required this.node});
+
+  @override
+  Widget build(BuildContext context) {
+    final isApi = node.type == NodeType.api;
+    final align =
+        isApi ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final bubbleColor =
+        isApi ? const Color(0xFFEDE7F6) : const Color(0xFFF0F0F0);
+    final borderColor =
+        isApi ? const Color(0xFF7B1FA2) : const Color(0xFFBDBDBD);
+    final label =
+        node.name.isNotEmpty ? node.name : (isApi ? 'assistant' : 'user');
+
+    final String content;
+    if (isApi && node.status == NodeStatus.error) {
+      content = '[Ошибка] ${node.text}';
+    } else {
+      content = node.text;
+    }
+    final isEmpty = content.isEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: align,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: bubbleColor,
+              border: Border.all(color: borderColor),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              isEmpty ? '(пусто)' : content,
+              style: TextStyle(
+                fontSize: 13,
+                color: isEmpty ? Colors.grey : Colors.black87,
+                fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+                decoration: TextDecoration.none,
+              ),
+              maxLines: 6,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

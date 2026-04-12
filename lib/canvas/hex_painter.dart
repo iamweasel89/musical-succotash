@@ -47,6 +47,7 @@ class HexPainter extends CustomPainter {
   final RoutingState? routing;
   final String? movingNodeId;
   final HexPos? moveTarget;
+  final Set<String> selectedIds;
 
   const HexPainter({
     required this.pan,
@@ -57,6 +58,7 @@ class HexPainter extends CustomPainter {
     this.routing,
     this.movingNodeId,
     this.moveTarget,
+    this.selectedIds = const {},
   });
 
   @override
@@ -68,7 +70,8 @@ class HexPainter extends CustomPainter {
       pulse != o.pulse ||
       routing != o.routing ||
       movingNodeId != o.movingNodeId ||
-      moveTarget != o.moveTarget;
+      moveTarget != o.moveTarget ||
+      selectedIds != o.selectedIds;
 
   // ── paint ─────────────────────────────────────────────────────────────────
   @override
@@ -329,6 +332,18 @@ class HexPainter extends CustomPainter {
         ..strokeWidth = 1.5,
     );
 
+    // Amber selection ring (chain mode)
+    if (selectedIds.contains(node.id)) {
+      canvas.drawCircle(
+        c,
+        ringR + ringW / 2 + 4.0,
+        Paint()
+          ..color = Colors.amber
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0 / scale
+          ..isAntiAlias = true,
+      );
+    }
   }
   // Labels are rendered as Flutter widgets in HexCanvasScreen, not here.
 }
