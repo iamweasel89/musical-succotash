@@ -767,7 +767,7 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
                 isScrollControlled: true,
                 builder: (_) => SettingsSheet(
                   settings: _settings,
-                  onChanged: () => setState(() {}),
+                  onChanged: () { setState(() {}); _saveState(); },
                 ),
               ),
               onLog: () => showModalBottomSheet(
