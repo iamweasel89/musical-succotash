@@ -279,13 +279,26 @@ class _HexCanvasScreenState extends State<HexCanvasScreen>
   }
 
   void _createEdge(String fromId, String toId, List<HexPos> waypoints) {
-    final existing = _edges
+    final sameDir = _edges
+        .where((e) => e.fromId == fromId && e.toId == toId)
+        .firstOrNull;
+    // If edge already exists in this direction — just reroute it
+    if (sameDir != null) {
+      _snapshot();
+      setState(() {
+        final idx = _edges.indexOf(sameDir);
+        _edges[idx] = sameDir.copyWith(waypoints: waypoints);
+      });
+      _saveState();
+      return;
+    }
+    // Block a third edge between the same pair
+    final pairCount = _edges
         .where((e) =>
             (e.fromId == fromId && e.toId == toId) ||
             (e.fromId == toId && e.toId == fromId))
-        .toList();
-    if (existing.length >= 2) return;
-    if (existing.any((e) => e.fromId == fromId && e.toId == toId)) return;
+        .length;
+    if (pairCount >= 2) return;
     _snapshot();
     setState(
         () => _edges.add(Edge(fromId: fromId, toId: toId, waypoints: waypoints)));
