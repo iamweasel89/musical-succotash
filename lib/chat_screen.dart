@@ -3,6 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+// ── Emoji stripping ───────────────────────────────────────────────────────
+
+bool _isEmojiCodePoint(int r) =>
+    (r >= 0x1F000 && r <= 0x1FFFF) || // All emoji in Plane 1
+    (r >= 0x2600 && r <= 0x27BF) || // Misc symbols, dingbats
+    (r >= 0xFE00 && r <= 0xFE0F) || // Variation selectors
+    r == 0x200D || // ZWJ
+    r == 0x20E3; // Combining enclosing keycap
+
+String _stripEmoji(String s) =>
+    String.fromCharCodes(s.runes.where((r) => !_isEmojiCodePoint(r)));
+
 import 'models/app_model.dart';
 import 'models/edge.dart';
 import 'models/hex_layout.dart';
@@ -238,7 +250,10 @@ class _ChatScreenState extends State<ChatScreen> {
   // ── Bubble actions ────────────────────────────────────────────────────────
 
   void _copyNode(Node node) {
-    Clipboard.setData(ClipboardData(text: node.text));
+    final text = widget.model.settings.hideEmoji
+        ? _stripEmoji(node.text)
+        : node.text;
+    Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Скопировано'), duration: Duration(seconds: 1)),
     );
@@ -525,6 +540,7 @@ class _ChatScreenState extends State<ChatScreen> {
           isCollapsed: _isNodeCollapsed(node.id),
           maxLines: widget.model.settings.compactLines,
           renderMarkdown: widget.model.settings.renderMarkdown,
+          hideEmoji: widget.model.settings.hideEmoji,
           onDoubleTap: () => _toggleNodeCollapse(node.id),
           onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
           onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
@@ -591,6 +607,7 @@ class _ChatBubble extends StatelessWidget {
   final bool isCollapsed;
   final int maxLines;
   final bool renderMarkdown;
+  final bool hideEmoji;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
@@ -608,6 +625,7 @@ class _ChatBubble extends StatelessWidget {
     this.isCollapsed = false,
     this.maxLines = 5,
     this.renderMarkdown = false,
+    this.hideEmoji = false,
     this.onDoubleTap,
     this.onSwipeLeft,
     this.onSwipeRight,
@@ -622,6 +640,8 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = node.type == NodeType.text;
+    final displayText =
+        hideEmoji ? _stripEmoji(node.text) : node.text;
 
     Widget content;
     if (!isUser) {
@@ -635,7 +655,7 @@ class _ChatBubble extends StatelessWidget {
           );
         case NodeStatus.error:
           content = Text(
-            node.text,
+            displayText,
             style: const TextStyle(color: Colors.red),
             maxLines: isCollapsed ? maxLines : null,
             overflow: isCollapsed ? TextOverflow.ellipsis : null,
@@ -643,13 +663,13 @@ class _ChatBubble extends StatelessWidget {
         default:
           if (!isCollapsed && renderMarkdown && node.status == NodeStatus.done && node.text.isNotEmpty) {
             content = MarkdownBody(
-              data: node.text,
+              data: displayText,
               selectable: true,
               softLineBreak: true,
             );
           } else {
             content = Text(
-              node.text,
+              displayText,
               maxLines: isCollapsed ? maxLines : null,
               overflow: isCollapsed ? TextOverflow.ellipsis : null,
             );
@@ -657,7 +677,7 @@ class _ChatBubble extends StatelessWidget {
       }
     } else {
       content = Text(
-        node.text,
+        displayText,
         maxLines: isCollapsed ? maxLines : null,
         overflow: isCollapsed ? TextOverflow.ellipsis : null,
       );

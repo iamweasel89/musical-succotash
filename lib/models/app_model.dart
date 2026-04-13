@@ -79,27 +79,8 @@ class AppModel extends ChangeNotifier {
       }
       final settingsRaw = _box.get('settings');
       if (settingsRaw != null) {
-        final s = GlobalSettings.fromJson(
-            jsonDecode(settingsRaw) as Map<String, dynamic>);
-        settings.anthropicKey = s.anthropicKey;
-        settings.openAiKey = s.openAiKey;
-        settings.deepSeekKey = s.deepSeekKey;
-        settings.defaultSystemPrompt = s.defaultSystemPrompt;
-        settings.streamingMode = s.streamingMode;
-        settings.showNodeLabels = s.showNodeLabels;
-        settings.defaultProvider = s.defaultProvider;
-        settings.defaultModel = s.defaultModel;
-        settings.defaultMaxTokens = s.defaultMaxTokens;
-        settings.defaultTemperature = s.defaultTemperature;
-        settings.compactChat = s.compactChat;
-        settings.compactLines = s.compactLines;
-        settings.renderMarkdown = s.renderMarkdown;
-        settings.tokensInAnthropicTotal = s.tokensInAnthropicTotal;
-        settings.tokensOutAnthropicTotal = s.tokensOutAnthropicTotal;
-        settings.tokensInOpenaiTotal = s.tokensInOpenaiTotal;
-        settings.tokensOutOpenaiTotal = s.tokensOutOpenaiTotal;
-        settings.tokensInDeepseekTotal = s.tokensInDeepseekTotal;
-        settings.tokensOutDeepseekTotal = s.tokensOutDeepseekTotal;
+        _copySettings(GlobalSettings.fromJson(
+            jsonDecode(settingsRaw) as Map<String, dynamic>));
       }
       _loadHistory();
     } catch (_) {}
@@ -228,6 +209,81 @@ class AppModel extends ChangeNotifier {
       .map((e) => nodeById(e.fromId))
       .whereType<Node>()
       .toList();
+
+  // ── Settings copy / export / import ──────────────────────────────────────
+
+  void _copySettings(GlobalSettings s) {
+    settings.anthropicKey = s.anthropicKey;
+    settings.openAiKey = s.openAiKey;
+    settings.deepSeekKey = s.deepSeekKey;
+    settings.defaultSystemPrompt = s.defaultSystemPrompt;
+    settings.streamingMode = s.streamingMode;
+    settings.showNodeLabels = s.showNodeLabels;
+    settings.renderMarkdown = s.renderMarkdown;
+    settings.hideEmoji = s.hideEmoji;
+    settings.defaultProvider = s.defaultProvider;
+    settings.defaultModel = s.defaultModel;
+    settings.defaultMaxTokens = s.defaultMaxTokens;
+    settings.defaultTemperature = s.defaultTemperature;
+    settings.compactChat = s.compactChat;
+    settings.compactLines = s.compactLines;
+    settings.tokensInAnthropicTotal = s.tokensInAnthropicTotal;
+    settings.tokensOutAnthropicTotal = s.tokensOutAnthropicTotal;
+    settings.tokensInOpenaiTotal = s.tokensInOpenaiTotal;
+    settings.tokensOutOpenaiTotal = s.tokensOutOpenaiTotal;
+    settings.tokensInDeepseekTotal = s.tokensInDeepseekTotal;
+    settings.tokensOutDeepseekTotal = s.tokensOutDeepseekTotal;
+  }
+
+  String exportJson() => jsonEncode({
+        'version': 1,
+        'nodes': nodes.map((n) => n.toJson()).toList(),
+        'edges': edges.map((e) => e.toJson()).toList(),
+        'chainPath': chainPath,
+        'settings': settings.toJson(),
+      });
+
+  void importJson(String json) {
+    final data = jsonDecode(json) as Map<String, dynamic>;
+    nodes
+      ..clear()
+      ..addAll((data['nodes'] as List)
+          .map((j) => Node.fromJson(j as Map<String, dynamic>)));
+    edges
+      ..clear()
+      ..addAll((data['edges'] as List)
+          .map((j) => Edge.fromJson(j as Map<String, dynamic>)));
+    chainPath
+      ..clear()
+      ..addAll((data['chainPath'] as List).cast<String>());
+    final s = data['settings'] as Map<String, dynamic>?;
+    if (s != null) _copySettings(GlobalSettings.fromJson(s));
+    save();
+    notifyListeners();
+  }
+
+  /// Returns an ordered list of node ids forming a chain that includes [nodeId]:
+  /// walks backwards to the root, then forwards to the first leaf.
+  List<String> chainForNode(String nodeId) {
+    final path = <String>[nodeId];
+    var cur = nodeId;
+    for (var i = 0; i < 500; i++) {
+      final parent =
+          edges.where((e) => e.toId == cur).map((e) => e.fromId).firstOrNull;
+      if (parent == null) break;
+      path.insert(0, parent);
+      cur = parent;
+    }
+    var tail = path.last;
+    for (var i = 0; i < 500; i++) {
+      final child =
+          edges.where((e) => e.fromId == tail).map((e) => e.toId).firstOrNull;
+      if (child == null) break;
+      path.add(child);
+      tail = child;
+    }
+    return path;
+  }
 
   void notifySettingsChanged() {
     save();

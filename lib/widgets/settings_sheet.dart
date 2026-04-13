@@ -34,12 +34,16 @@ class SettingsSheet extends StatefulWidget {
   final GlobalSettings settings;
   final VoidCallback onChanged;
   final VoidCallback? onClearAll;
+  final VoidCallback? onExport;
+  final VoidCallback? onImport;
 
   const SettingsSheet({
     super.key,
     required this.settings,
     required this.onChanged,
     this.onClearAll,
+    this.onExport,
+    this.onImport,
   });
 
   @override
@@ -161,6 +165,14 @@ class _SettingsSheetState extends State<SettingsSheet> {
               value: s.renderMarkdown,
               onChanged: (v) {
                 setState(() => s.renderMarkdown = v);
+                _save();
+              },
+            ),
+            _SwitchRow(
+              label: 'Скрывать эмодзи',
+              value: s.hideEmoji,
+              onChanged: (v) {
+                setState(() => s.hideEmoji = v);
                 _save();
               },
             ),
@@ -291,6 +303,34 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 ),
               ],
             ),
+            if (widget.onExport != null || widget.onImport != null) ...[
+              const Divider(height: 24),
+              const Text('Данные',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (widget.onExport != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.upload_outlined, size: 18),
+                        label: const Text('Экспорт'),
+                        onPressed: widget.onExport,
+                      ),
+                    ),
+                  if (widget.onExport != null && widget.onImport != null)
+                    const SizedBox(width: 8),
+                  if (widget.onImport != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.download_outlined, size: 18),
+                        label: const Text('Импорт'),
+                        onPressed: widget.onImport,
+                      ),
+                    ),
+                ],
+              ),
+            ],
             const Divider(height: 24),
             const Text('Использование API',
                 style: TextStyle(fontWeight: FontWeight.w600)),

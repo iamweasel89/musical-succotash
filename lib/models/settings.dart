@@ -6,6 +6,7 @@ class GlobalSettings {
   bool streamingMode;
   bool showNodeLabels;
   bool renderMarkdown;
+  bool hideEmoji;
 
   // Default API node settings
   String defaultProvider;
@@ -33,6 +34,7 @@ class GlobalSettings {
     this.streamingMode = false,
     this.showNodeLabels = true,
     this.renderMarkdown = false,
+    this.hideEmoji = false,
     this.defaultProvider = 'deepseek',
     this.defaultModel = 'deepseek-chat',
     this.defaultMaxTokens = 1024,
@@ -55,6 +57,7 @@ class GlobalSettings {
         'streamingMode': streamingMode,
         'showNodeLabels': showNodeLabels,
         'renderMarkdown': renderMarkdown,
+        'hideEmoji': hideEmoji,
         'defaultProvider': defaultProvider,
         'defaultModel': defaultModel,
         'defaultMaxTokens': defaultMaxTokens,
@@ -77,6 +80,7 @@ class GlobalSettings {
         streamingMode: j['streamingMode'] as bool? ?? false,
         showNodeLabels: j['showNodeLabels'] as bool? ?? true,
         renderMarkdown: j['renderMarkdown'] as bool? ?? false,
+        hideEmoji: j['hideEmoji'] as bool? ?? false,
         defaultProvider: j['defaultProvider'] as String? ?? 'deepseek',
         defaultModel: j['defaultModel'] as String? ?? 'deepseek-chat',
         defaultMaxTokens: j['defaultMaxTokens'] as int? ?? 1024,
