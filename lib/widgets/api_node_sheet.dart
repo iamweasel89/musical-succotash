@@ -126,20 +126,8 @@ class _ApiNodeSheetState extends State<ApiNodeSheet> {
               selected: {_api.provider},
               onSelectionChanged: (s) => setState(() {
                 _api.provider = s.first;
-                _api.model = _models[_api.provider]!.first;
+                _api.model = _models[s.first]!.first;
               }),
-            ),
-            const SizedBox(height: 12),
-            // Model
-            const Text('Model', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            DropdownButtonFormField<String>(
-              value: _api.model,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: (_models[_api.provider] ?? [])
-                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                  .toList(),
-              onChanged: (v) => setState(() => _api.model = v!),
             ),
             const SizedBox(height: 12),
             // Max tokens

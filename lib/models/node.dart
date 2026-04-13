@@ -24,6 +24,9 @@ class Node {
   final DateTime createdAt;
   DateTime updatedAt;
 
+  /// Direction of growth in the hex grid (index into hexDirs, 0=up).
+  final int growthDir;
+
   Node({
     String? id,
     this.name = '',
@@ -34,6 +37,7 @@ class Node {
     Map<String, String>? received,
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.growthDir = 0,
   })  : id = id ?? const Uuid().v4(),
         received = received ?? {},
         createdAt = createdAt ?? DateTime.now(),
@@ -57,6 +61,7 @@ class Node {
         received: received ?? Map<String, String>.from(this.received),
         createdAt: createdAt,
         updatedAt: updatedAt ?? DateTime.now(),
+        growthDir: growthDir,
       );
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +74,7 @@ class Node {
         'received': received,
         'createdAt': createdAt.millisecondsSinceEpoch,
         'updatedAt': updatedAt.millisecondsSinceEpoch,
+        'growthDir': growthDir,
       };
 
   factory Node.fromJson(Map<String, dynamic> j) => Node(
@@ -87,5 +93,6 @@ class Node {
         updatedAt: j['updatedAt'] != null
             ? DateTime.fromMillisecondsSinceEpoch(j['updatedAt'] as int)
             : null,
+        growthDir: j['growthDir'] as int? ?? 0,
       );
 }

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'models/app_model.dart';
 import 'models/edge.dart';
-import 'models/hex_pos.dart';
+import 'models/hex_layout.dart';
 import 'models/node.dart';
 import 'services/api_runner.dart';
 import 'widgets/api_node_sheet.dart';
@@ -42,35 +42,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  // ── Hex helpers ───────────────────────────────────────────────────────────
-
-  List<HexPos> _neighbors(HexPos p) => [
-        HexPos(p.q + 1, p.r),
-        HexPos(p.q - 1, p.r),
-        HexPos(p.q, p.r + 1),
-        HexPos(p.q, p.r - 1),
-        HexPos(p.q + 1, p.r - 1),
-        HexPos(p.q - 1, p.r + 1),
-      ];
-
-  HexPos _freeHex(HexPos near, Set<HexPos> occupied) {
-    if (!occupied.contains(near)) return near;
-    final visited = <HexPos>{near};
-    final queue = <HexPos>[];
-    for (final p in _neighbors(near)) {
-      if (visited.add(p)) queue.add(p);
-    }
-    while (queue.isNotEmpty) {
-      final pos = queue.removeAt(0);
-      if (!occupied.contains(pos)) return pos;
-      for (final p in _neighbors(pos)) {
-        if (visited.add(p)) queue.add(p);
-      }
-    }
-    return near;
-  }
-
-  // ── Messages builder (for API history + token preview) ────────────────────
+  // ── Messages builder ──────────────────────────────────────────────────────
 
   List<Map<String, String>> _buildMessages({int upTo = -1}) {
     final end = upTo < 0 ? _chainPath.length : upTo + 1;
@@ -89,6 +61,31 @@ class _ChatScreenState extends State<ChatScreen> {
   String _buildInputPreview(int chainIndex) =>
       _buildMessages(upTo: chainIndex).map((m) => m['content']!).join('\n\n');
 
+  // ── Placement helpers ─────────────────────────────────────────────────────
+
+  Set<HexPos> get _occupied =>
+      widget.model.nodes.map((n) => n.position).toSet();
+
+  ({HexPos pos, int dir}) _continuationSlot(Node lastNode) {
+    final pos = chainNextPos(lastNode.position, lastNode.growthDir);
+    return (pos: pos, dir: lastNode.growthDir);
+  }
+
+  ({HexPos pos, int dir}) _branchSlot(Node branchPoint) {
+    final usedDirs = widget.model.edges
+        .where((e) => e.fromId == branchPoint.id)
+        .map((e) => widget.model.nodeById(e.toId))
+        .whereType<Node>()
+        .map((n) => n.growthDir)
+        .toSet();
+    return nextBranchSlot(
+      from: branchPoint.position,
+      parentGrowthDir: branchPoint.growthDir,
+      usedChildDirs: usedDirs,
+      occupied: _occupied,
+    );
+  }
+
   // ── Send ──────────────────────────────────────────────────────────────────
 
   Future<void> _send() async {
@@ -97,17 +94,39 @@ class _ChatScreenState extends State<ChatScreen> {
     _inputCtrl.clear();
     setState(() => _sending = true);
 
-    final occupied = widget.model.nodes.map((n) => n.position).toSet();
-    final HexPos anchor = _chainPath.isEmpty
-        ? HexPos(0, 0)
-        : widget.model.nodeById(_chainPath.last)?.position ?? HexPos(0, 0);
+    final ({HexPos pos, int dir}) textSlot;
 
-    final textPos = _freeHex(anchor, occupied);
-    occupied.add(textPos);
-    final apiPos = _freeHex(textPos, occupied);
+    if (_chainPath.isEmpty) {
+      final startPos = HexPos(0, 0);
+      final occ = _occupied;
+      textSlot = (
+        pos: occ.contains(startPos) ? chainNextPos(startPos, 0) : startPos,
+        dir: 0,
+      );
+    } else {
+      final lastNode = widget.model.nodeById(_chainPath.last)!;
+      final hasChildren = widget.model.edges.any((e) => e.fromId == lastNode.id);
+      textSlot = hasChildren ? _branchSlot(lastNode) : _continuationSlot(lastNode);
+    }
 
-    final textNode = Node(type: NodeType.text, position: textPos, text: text);
-    final apiNode = Node(type: NodeType.api, position: apiPos);
+    final occ = _occupied..add(textSlot.pos);
+    final apiPos = chainNextPos(textSlot.pos, textSlot.dir);
+    // If api position is taken, find nearest free in same direction
+    final finalApiPos = occ.contains(apiPos)
+        ? _fallbackPos(textSlot.pos, textSlot.dir, occ)
+        : apiPos;
+
+    final textNode = Node(
+      type: NodeType.text,
+      position: textSlot.pos,
+      text: text,
+      growthDir: textSlot.dir,
+    );
+    final apiNode = Node(
+      type: NodeType.api,
+      position: finalApiPos,
+      growthDir: textSlot.dir,
+    );
     nodeApiSettings[apiNode.id] = ApiNodeSettings();
 
     widget.model.addNode(textNode);
@@ -123,9 +142,16 @@ class _ChatScreenState extends State<ChatScreen> {
       _sending = false;
     });
     _saveChain();
-
     _scrollToBottom();
     await _runNode(apiNode);
+  }
+
+  HexPos _fallbackPos(HexPos from, int dir, Set<HexPos> occ) {
+    for (int s = 2; s <= 10; s++) {
+      final p = hexStep(from, dir, s);
+      if (!occ.contains(p)) return p;
+    }
+    return hexStep(from, dir, 2);
   }
 
   Future<void> _runNode(Node apiNode) async {
@@ -200,7 +226,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     widget.model.updateNode(node.copyWith(text: result));
 
-    // Reset downstream API nodes
     for (int j = chainIndex + 1; j < _chainPath.length; j++) {
       final n = widget.model.nodeById(_chainPath[j]);
       if (n != null && n.type == NodeType.api) {
@@ -210,10 +235,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _branchFromText(Node textNode, int chainIndex) {
-    final occupied = widget.model.nodes.map((n) => n.position).toSet();
-    final apiPos = _freeHex(textNode.position, occupied);
-
-    final apiNode = Node(type: NodeType.api, position: apiPos);
+    final slot = _branchSlot(textNode);
+    final apiNode = Node(
+      type: NodeType.api,
+      position: slot.pos,
+      growthDir: slot.dir,
+    );
     nodeApiSettings[apiNode.id] = ApiNodeSettings();
 
     widget.model.addNode(apiNode);
@@ -229,7 +256,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _branchFromApi(int chainIndex) {
-    // Truncate chain here — next _send() will branch from this API node
     setState(() => _chainPath.removeRange(chainIndex + 1, _chainPath.length));
     _saveChain();
   }
@@ -301,9 +327,7 @@ class _ChatScreenState extends State<ChatScreen> {
         return _ChatBubble(
           node: node,
           onCopy: () => _copyNode(node),
-          onEdit: node.type == NodeType.text
-              ? () => _editNode(node, i)
-              : null,
+          onEdit: node.type == NodeType.text ? () => _editNode(node, i) : null,
           onBranch: node.type == NodeType.text
               ? () => _branchFromText(node, i)
               : () => _branchFromApi(i),
