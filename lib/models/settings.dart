@@ -5,6 +5,7 @@ class GlobalSettings {
   String defaultSystemPrompt;
   bool streamingMode;
   bool showNodeLabels;
+  bool useBuiltinSystemPrompt;
   bool renderMarkdown;
   bool hideEmoji;
 
@@ -31,6 +32,7 @@ class GlobalSettings {
     this.openAiKey = '',
     this.deepSeekKey = '',
     this.defaultSystemPrompt = '',
+    this.useBuiltinSystemPrompt = true,
     this.streamingMode = false,
     this.showNodeLabels = true,
     this.renderMarkdown = false,
@@ -54,6 +56,7 @@ class GlobalSettings {
         'openAiKey': openAiKey,
         'deepSeekKey': deepSeekKey,
         'defaultSystemPrompt': defaultSystemPrompt,
+        'useBuiltinSystemPrompt': useBuiltinSystemPrompt,
         'streamingMode': streamingMode,
         'showNodeLabels': showNodeLabels,
         'renderMarkdown': renderMarkdown,
@@ -77,6 +80,7 @@ class GlobalSettings {
         openAiKey: j['openAiKey'] as String? ?? '',
         deepSeekKey: j['deepSeekKey'] as String? ?? '',
         defaultSystemPrompt: j['defaultSystemPrompt'] as String? ?? '',
+        useBuiltinSystemPrompt: j['useBuiltinSystemPrompt'] as bool? ?? true,
         streamingMode: j['streamingMode'] as bool? ?? false,
         showNodeLabels: j['showNodeLabels'] as bool? ?? true,
         renderMarkdown: j['renderMarkdown'] as bool? ?? false,

@@ -177,15 +177,26 @@ class _SettingsSheetState extends State<SettingsSheet> {
               },
             ),
             const SizedBox(height: 12),
-            const Text('Default system prompt',
+            const Text('Системный промпт',
                 style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
+            _SwitchRow(
+              label: 'Встроенный промпт',
+              value: s.useBuiltinSystemPrompt,
+              onChanged: (v) {
+                setState(() => s.useBuiltinSystemPrompt = v);
+                _save();
+              },
+            ),
+            const SizedBox(height: 4),
             TextField(
               controller: _sysPromptCtrl,
               maxLines: 3,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Leave empty for no system prompt',
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: s.useBuiltinSystemPrompt
+                    ? 'Дополнение к встроенному промпту (необязательно)'
+                    : 'Системный промпт (пусто — без промпта)',
               ),
               onChanged: (v) {
                 s.defaultSystemPrompt = v;

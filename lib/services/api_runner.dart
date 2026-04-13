@@ -92,6 +92,28 @@ Future<void> runApiNode({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+const _builtinPromptBody =
+    'You are a helpful AI assistant embedded in a personal knowledge-management '
+    'system. Conversations are stored as a graph of nodes on a hexagonal canvas. '
+    'Each user message and each assistant reply is a node; conversations can '
+    'branch at any point to explore alternatives. '
+    'Keep your answers concise and to the point unless the user asks otherwise.';
+
+String _effectiveSystemPrompt(GlobalSettings s) {
+  final parts = <String>[];
+  if (s.useBuiltinSystemPrompt) {
+    final d = DateTime.now();
+    final date =
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    parts.add('Today is $date. $_builtinPromptBody');
+  }
+  if (s.defaultSystemPrompt.isNotEmpty) {
+    parts.add(s.defaultSystemPrompt);
+  }
+  return parts.join('\n\n');
+}
+
 String _keyFor(String provider, GlobalSettings s) {
   switch (provider) {
     case 'anthropic': return s.anthropicKey;
@@ -204,7 +226,7 @@ Future<void> _runStreaming({
   required bool stream,
 }) {
   final provider = apiSettings.provider;
-  final systemPrompt = settings.defaultSystemPrompt;
+  final systemPrompt = _effectiveSystemPrompt(settings);
 
   switch (provider) {
     case 'anthropic':
