@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'models/app_model.dart';
 import 'models/edge.dart';
@@ -56,6 +57,25 @@ class _ChatScreenState extends State<ChatScreen> {
     return near;
   }
 
+  // ── Messages builder (for API history + token preview) ────────────────────
+
+  List<Map<String, String>> _buildMessages({int upTo = -1}) {
+    final end = upTo < 0 ? _chainPath.length : upTo + 1;
+    final messages = <Map<String, String>>[];
+    for (int i = 0; i < end; i++) {
+      final n = widget.model.nodeById(_chainPath[i]);
+      if (n == null || n.text.isEmpty) continue;
+      messages.add({
+        'role': n.type == NodeType.text ? 'user' : 'assistant',
+        'content': n.text,
+      });
+    }
+    return messages;
+  }
+
+  String _buildInputPreview(int chainIndex) =>
+      _buildMessages(upTo: chainIndex).map((m) => m['content']!).join('\n\n');
+
   // ── Send ──────────────────────────────────────────────────────────────────
 
   Future<void> _send() async {
@@ -65,13 +85,9 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _sending = true);
 
     final occupied = widget.model.nodes.map((n) => n.position).toSet();
-
-    final HexPos anchor;
-    if (_chainPath.isEmpty) {
-      anchor = HexPos(0, 0);
-    } else {
-      anchor = widget.model.nodeById(_chainPath.last)?.position ?? HexPos(0, 0);
-    }
+    final HexPos anchor = _chainPath.isEmpty
+        ? HexPos(0, 0)
+        : widget.model.nodeById(_chainPath.last)?.position ?? HexPos(0, 0);
 
     final textPos = _freeHex(anchor, occupied);
     occupied.add(textPos);
@@ -90,9 +106,7 @@ class _ChatScreenState extends State<ChatScreen> {
     widget.model.addEdge(Edge(fromId: textNode.id, toId: apiNode.id));
 
     setState(() {
-      _chainPath
-        ..add(textNode.id)
-        ..add(apiNode.id);
+      _chainPath..add(textNode.id)..add(apiNode.id);
       _sending = false;
     });
 
@@ -101,15 +115,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _runNode(Node apiNode) async {
-    final messages = <Map<String, String>>[];
-    for (final id in _chainPath) {
-      final n = widget.model.nodeById(id);
-      if (n == null || n.text.isEmpty) continue;
-      messages.add({
-        'role': n.type == NodeType.text ? 'user' : 'assistant',
-        'content': n.text,
-      });
-    }
+    final chainIndex = _chainPath.indexOf(apiNode.id);
+    final messages = _buildMessages(upTo: chainIndex);
     if (messages.isEmpty) return;
 
     final apiSettings = nodeApiSettings[apiNode.id] ?? ApiNodeSettings();
@@ -138,6 +145,96 @@ class _ChatScreenState extends State<ChatScreen> {
         if (!mounted) return;
         widget.model.updateNode(apiNode.copyWith(status: NodeStatus.error, text: error));
       },
+    );
+  }
+
+  // ── Bubble actions ────────────────────────────────────────────────────────
+
+  void _copyNode(Node node) {
+    Clipboard.setData(ClipboardData(text: node.text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Скопировано'), duration: Duration(seconds: 1)),
+    );
+  }
+
+  Future<void> _editNode(Node node, int chainIndex) async {
+    final ctrl = TextEditingController(text: node.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Редактировать'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: null,
+          autofocus: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null || result == node.text) return;
+
+    widget.model.updateNode(node.copyWith(text: result));
+
+    // Reset downstream API nodes
+    for (int j = chainIndex + 1; j < _chainPath.length; j++) {
+      final n = widget.model.nodeById(_chainPath[j]);
+      if (n != null && n.type == NodeType.api) {
+        widget.model.updateNode(n.copyWith(status: NodeStatus.idle, text: ''));
+      }
+    }
+  }
+
+  void _branchFromText(Node textNode, int chainIndex) {
+    final occupied = widget.model.nodes.map((n) => n.position).toSet();
+    final apiPos = _freeHex(textNode.position, occupied);
+
+    final apiNode = Node(type: NodeType.api, position: apiPos);
+    nodeApiSettings[apiNode.id] = ApiNodeSettings();
+
+    widget.model.addNode(apiNode);
+    widget.model.addEdge(Edge(fromId: textNode.id, toId: apiNode.id));
+
+    setState(() {
+      _chainPath
+        ..removeRange(chainIndex + 1, _chainPath.length)
+        ..add(apiNode.id);
+    });
+
+    _runNode(apiNode);
+  }
+
+  void _branchFromApi(int chainIndex) {
+    // Truncate chain here — next _send() will branch from this API node
+    setState(() => _chainPath.removeRange(chainIndex + 1, _chainPath.length));
+  }
+
+  Future<void> _retryNode(Node apiNode) async {
+    widget.model.updateNode(apiNode.copyWith(status: NodeStatus.idle, text: ''));
+    await _runNode(apiNode);
+  }
+
+  void _showNodeSettings(Node node, int chainIndex) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ApiNodeSheet(
+        node: node,
+        settings: widget.model.settings,
+        buildInput: (_) => _buildInputPreview(chainIndex),
+        onChanged: widget.model.updateNode,
+        onRun: (n) => _retryNode(n),
+      ),
     );
   }
 
@@ -186,7 +283,22 @@ class _ChatScreenState extends State<ChatScreen> {
       itemBuilder: (context, i) {
         final node = widget.model.nodeById(_chainPath[i]);
         if (node == null) return const SizedBox.shrink();
-        return _ChatBubble(node: node);
+        return _ChatBubble(
+          node: node,
+          onCopy: () => _copyNode(node),
+          onEdit: node.type == NodeType.text
+              ? () => _editNode(node, i)
+              : null,
+          onBranch: node.type == NodeType.text
+              ? () => _branchFromText(node, i)
+              : () => _branchFromApi(i),
+          onRetry: (node.type == NodeType.api && node.status == NodeStatus.error)
+              ? () => _retryNode(node)
+              : null,
+          onSettings: node.type == NodeType.api
+              ? () => _showNodeSettings(node, i)
+              : null,
+        );
       },
     );
   }
@@ -232,7 +344,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
 class _ChatBubble extends StatelessWidget {
   final Node node;
-  const _ChatBubble({required this.node});
+  final VoidCallback onCopy;
+  final VoidCallback? onEdit;
+  final VoidCallback onBranch;
+  final VoidCallback? onRetry;
+  final VoidCallback? onSettings;
+
+  const _ChatBubble({
+    required this.node,
+    required this.onCopy,
+    this.onEdit,
+    required this.onBranch,
+    this.onRetry,
+    this.onSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -260,20 +385,87 @@ class _ChatBubble extends StatelessWidget {
 
     return Align(
       alignment: isUser ? Alignment.centerLeft : Alignment.centerRight,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isUser
-              ? Colors.grey.shade200
-              : Theme.of(context).colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: content,
+      child: Column(
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        children: [
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isUser
+                  ? Colors.grey.shade200
+                  : Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: content,
+          ),
+          _ActionRow(
+            onCopy: onCopy,
+            onEdit: onEdit,
+            onBranch: onBranch,
+            onRetry: onRetry,
+            onSettings: onSettings,
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  final VoidCallback onCopy;
+  final VoidCallback? onEdit;
+  final VoidCallback onBranch;
+  final VoidCallback? onRetry;
+  final VoidCallback? onSettings;
+
+  const _ActionRow({
+    required this.onCopy,
+    this.onEdit,
+    required this.onBranch,
+    this.onRetry,
+    this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Btn(icon: Icons.copy_outlined, tooltip: 'Копировать', onTap: onCopy),
+        if (onEdit != null)
+          _Btn(icon: Icons.edit_outlined, tooltip: 'Редактировать', onTap: onEdit!),
+        _Btn(icon: Icons.call_split, tooltip: 'Ветвление', onTap: onBranch),
+        if (onRetry != null)
+          _Btn(icon: Icons.replay, tooltip: 'Повторить', onTap: onRetry!),
+        if (onSettings != null)
+          _Btn(icon: Icons.more_horiz, tooltip: 'Настройки', onTap: onSettings!),
+      ],
+    );
+  }
+}
+
+class _Btn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _Btn({required this.icon, required this.tooltip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 16),
+      tooltip: tooltip,
+      onPressed: onTap,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(),
+      visualDensity: VisualDensity.compact,
+      color: Colors.grey[600],
     );
   }
 }
