@@ -10,6 +10,7 @@ import 'settings.dart';
 class AppModel extends ChangeNotifier {
   final List<Node> nodes = [];
   final List<Edge> edges = [];
+  final List<String> chainPath = [];
   final GlobalSettings settings = GlobalSettings();
 
   Box<String> get _box => Hive.box<String>('state');
@@ -31,6 +32,10 @@ class AppModel extends ChangeNotifier {
               .map((j) => Edge.fromJson(j as Map<String, dynamic>)),
         );
       }
+      final chainRaw = _box.get('chainPath');
+      if (chainRaw != null) {
+        chainPath.addAll((jsonDecode(chainRaw) as List).cast<String>());
+      }
       final settingsRaw = _box.get('settings');
       if (settingsRaw != null) {
         final s = GlobalSettings.fromJson(
@@ -48,6 +53,7 @@ class AppModel extends ChangeNotifier {
   void save() {
     _box.put('nodes', jsonEncode(nodes.map((n) => n.toJson()).toList()));
     _box.put('edges', jsonEncode(edges.map((e) => e.toJson()).toList()));
+    _box.put('chainPath', jsonEncode(chainPath));
     _box.put('settings', jsonEncode(settings.toJson()));
   }
 

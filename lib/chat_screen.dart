@@ -23,6 +23,19 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
 
   @override
+  void initState() {
+    super.initState();
+    _chainPath.addAll(widget.model.chainPath);
+  }
+
+  void _saveChain() {
+    widget.model.chainPath
+      ..clear()
+      ..addAll(_chainPath);
+    widget.model.save();
+  }
+
+  @override
   void dispose() {
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
@@ -109,6 +122,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _chainPath..add(textNode.id)..add(apiNode.id);
       _sending = false;
     });
+    _saveChain();
 
     _scrollToBottom();
     await _runNode(apiNode);
@@ -210,13 +224,14 @@ class _ChatScreenState extends State<ChatScreen> {
         ..removeRange(chainIndex + 1, _chainPath.length)
         ..add(apiNode.id);
     });
-
+    _saveChain();
     _runNode(apiNode);
   }
 
   void _branchFromApi(int chainIndex) {
     // Truncate chain here — next _send() will branch from this API node
     setState(() => _chainPath.removeRange(chainIndex + 1, _chainPath.length));
+    _saveChain();
   }
 
   Future<void> _retryNode(Node apiNode) async {
