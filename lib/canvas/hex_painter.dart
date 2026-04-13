@@ -336,7 +336,7 @@ class HexPainter extends CustomPainter {
     if (selectedIds.contains(node.id)) {
       canvas.drawCircle(
         c,
-        ringR + ringW / 2 + 4.0,
+        ringR + ringW / 2 + 2.0,
         Paint()
           ..color = Colors.amber
           ..style = PaintingStyle.stroke

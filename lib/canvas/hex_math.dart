@@ -7,8 +7,8 @@ import '../models/hex_pos.dart';
 // ── Constants ──────────────────────────────────────────────────────────────
 const double hexR = 40.0;  // circumradius (world-space pixels)
 const double nodeR = 10.0;  // node circle radius
-const double ringR = 17.5;  // status ring centre (inner=nodeR=10, outer=25)
-const double ringW = 15.0;  // status ring stroke width
+const double ringR = 14.0;  // status ring centre
+const double ringW = 7.5;   // status ring stroke width (inner≈10, outer≈17.75)
 const double sqrt3 = 1.7320508075688772935;
 
 // ── Pre-computed vertex offsets for flat-top hex ───────────────────────────

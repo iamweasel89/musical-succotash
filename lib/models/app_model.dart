@@ -78,6 +78,14 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearAll() {
+    nodes.clear();
+    edges.clear();
+    chainPath.clear();
+    save();
+    notifyListeners();
+  }
+
   // ── Queries ────────────────────────────────────────────────────────────────
   Node? nodeById(String id) {
     for (final n in nodes) {

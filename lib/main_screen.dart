@@ -23,6 +23,7 @@ class _MainScreenState extends State<MainScreen> {
       builder: (_) => SettingsSheet(
         settings: widget.model.settings,
         onChanged: widget.model.save,
+        onClearAll: widget.model.clearAll,
       ),
     );
   }
@@ -43,7 +44,7 @@ class _MainScreenState extends State<MainScreen> {
         index: _tab,
         children: [
           ChatScreen(model: widget.model),
-          CanvasView(model: widget.model),
+          CanvasView(model: widget.model, isActive: _tab == 1),
         ],
       ),
       bottomNavigationBar: NavigationBar(

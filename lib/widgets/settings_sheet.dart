@@ -6,11 +6,13 @@ import '../services/updater.dart';
 class SettingsSheet extends StatefulWidget {
   final GlobalSettings settings;
   final VoidCallback onChanged;
+  final VoidCallback? onClearAll;
 
   const SettingsSheet({
     super.key,
     required this.settings,
     required this.onChanged,
+    this.onClearAll,
   });
 
   @override
@@ -102,6 +104,44 @@ class _SettingsSheetState extends State<SettingsSheet> {
             const SizedBox(height: 12),
             // Update section
             const _UpdateSection(),
+            if (widget.onClearAll != null) ...[
+              const Divider(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.delete_forever, color: Colors.red),
+                  label: const Text('Очистить все данные',
+                      style: TextStyle(color: Colors.red)),
+                  style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red)),
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Очистить всё?'),
+                        content: const Text(
+                            'Все ноды, рёбра и история чата будут удалены. Настройки и ключи сохранятся.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Отмена'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Удалить',
+                                style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      widget.onClearAll!();
+                      if (context.mounted) Navigator.pop(context);
+                    }
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),

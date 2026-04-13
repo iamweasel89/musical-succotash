@@ -11,7 +11,8 @@ import 'hex_painter.dart';
 /// chain-path amber highlight.
 class CanvasView extends StatefulWidget {
   final AppModel model;
-  const CanvasView({super.key, required this.model});
+  final bool isActive;
+  const CanvasView({super.key, required this.model, this.isActive = false});
 
   @override
   State<CanvasView> createState() => _CanvasViewState();
@@ -51,6 +52,14 @@ class _CanvasViewState extends State<CanvasView>
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     _frameMs.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(CanvasView old) {
+    super.didUpdateWidget(old);
+    if (widget.isActive && !old.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitAll());
+    }
   }
 
   void _onTimings(List<FrameTiming> t) {

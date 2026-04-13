@@ -90,8 +90,9 @@ class _ChatScreenState extends State<ChatScreen> {
   // ── Send ──────────────────────────────────────────────────────────────────
 
   Future<void> _send() async {
-    final text = _inputCtrl.text.trim();
-    if (text.isEmpty || _sending) return;
+    final raw = _inputCtrl.text.trim();
+    if (raw.isEmpty || _sending) return;
+    final text = raw[0].toUpperCase() + raw.substring(1);
     _inputCtrl.clear();
     setState(() => _sending = true);
 
@@ -266,6 +267,48 @@ class _ChatScreenState extends State<ChatScreen> {
     await _runNode(apiNode);
   }
 
+  // ── Branch switching ──────────────────────────────────────────────────────
+
+  List<String> _siblingsOf(int chainIndex) {
+    if (chainIndex == 0) return [_chainPath[chainIndex]];
+    final parentId = _chainPath[chainIndex - 1];
+    return widget.model.edges
+        .where((e) => e.fromId == parentId)
+        .map((e) => e.toId)
+        .toList();
+  }
+
+  List<String> _followChain(String startId) {
+    final result = <String>[startId];
+    var current = startId;
+    for (int i = 0; i < 200; i++) {
+      final children = widget.model.edges
+          .where((e) => e.fromId == current)
+          .map((e) => e.toId)
+          .toList();
+      if (children.isEmpty) break;
+      result.add(children.first);
+      current = children.first;
+    }
+    return result;
+  }
+
+  void _switchBranch(int chainIndex, int delta) {
+    final siblings = _siblingsOf(chainIndex);
+    if (siblings.length <= 1) return;
+    final currentId = _chainPath[chainIndex];
+    final idx = siblings.indexOf(currentId);
+    if (idx < 0) return;
+    final nextIdx = (idx + delta + siblings.length) % siblings.length;
+    final suffix = _followChain(siblings[nextIdx]);
+    setState(() {
+      _chainPath
+        ..removeRange(chainIndex, _chainPath.length)
+        ..addAll(suffix);
+    });
+    _saveChain();
+  }
+
   void _showNodeSettings(Node node, int chainIndex) {
     showModalBottomSheet(
       context: context,
@@ -325,16 +368,20 @@ class _ChatScreenState extends State<ChatScreen> {
       itemBuilder: (context, i) {
         final node = widget.model.nodeById(_chainPath[i]);
         if (node == null) return const SizedBox.shrink();
+        final siblings = _siblingsOf(i);
+        final siblingIndex = siblings.indexOf(_chainPath[i]);
         return _ChatBubble(
           node: node,
+          siblingCount: siblings.length,
+          siblingIndex: siblingIndex < 0 ? 0 : siblingIndex,
+          onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
+          onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
           onCopy: () => _copyNode(node),
           onEdit: node.type == NodeType.text ? () => _editNode(node, i) : null,
           onBranch: node.type == NodeType.text
               ? () => _branchFromText(node, i)
               : () => _branchFromApi(i),
-          onRetry: (node.type == NodeType.api && node.status == NodeStatus.error)
-              ? () => _retryNode(node)
-              : null,
+          onRetry: node.type == NodeType.api ? () => _retryNode(node) : null,
           onSettings: node.type == NodeType.api
               ? () => _showNodeSettings(node, i)
               : null,
@@ -384,6 +431,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
 class _ChatBubble extends StatelessWidget {
   final Node node;
+  final int siblingCount;
+  final int siblingIndex;
+  final VoidCallback? onSwipeLeft;
+  final VoidCallback? onSwipeRight;
   final VoidCallback onCopy;
   final VoidCallback? onEdit;
   final VoidCallback onBranch;
@@ -392,6 +443,10 @@ class _ChatBubble extends StatelessWidget {
 
   const _ChatBubble({
     required this.node,
+    this.siblingCount = 1,
+    this.siblingIndex = 0,
+    this.onSwipeLeft,
+    this.onSwipeRight,
     required this.onCopy,
     this.onEdit,
     required this.onBranch,
@@ -425,32 +480,57 @@ class _ChatBubble extends StatelessWidget {
 
     return Align(
       alignment: isUser ? Alignment.centerLeft : Alignment.centerRight,
-      child: Column(
-        crossAxisAlignment:
-            isUser ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-        children: [
-          Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.75,
+      child: GestureDetector(
+        onHorizontalDragEnd: (d) {
+          final v = d.primaryVelocity ?? 0;
+          if (v < -200) onSwipeLeft?.call();
+          if (v > 200) onSwipeRight?.call();
+        },
+        child: Column(
+          crossAxisAlignment:
+              isUser ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          children: [
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? Colors.grey.shade200
+                    : Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: content,
             ),
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isUser
-                  ? Colors.grey.shade200
-                  : Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
+            if (siblingCount > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(siblingCount, (i) => Container(
+                    width: 5,
+                    height: 5,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == siblingIndex
+                          ? Colors.grey[700]
+                          : Colors.grey[300],
+                    ),
+                  )),
+                ),
+              ),
+            _ActionRow(
+              onCopy: onCopy,
+              onEdit: onEdit,
+              onBranch: onBranch,
+              onRetry: onRetry,
+              onSettings: onSettings,
             ),
-            child: content,
-          ),
-          _ActionRow(
-            onCopy: onCopy,
-            onEdit: onEdit,
-            onBranch: onBranch,
-            onRetry: onRetry,
-            onSettings: onSettings,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
