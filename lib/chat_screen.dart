@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'models/app_model.dart';
 import 'models/edge.dart';
 import 'models/hex_layout.dart';
+import 'models/hex_pos.dart';
 import 'models/node.dart';
 import 'services/api_runner.dart';
 import 'widgets/api_node_sheet.dart';
