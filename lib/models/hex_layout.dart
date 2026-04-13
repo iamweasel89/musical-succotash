@@ -1,20 +1,14 @@
 import 'hex_pos.dart';
 
-// Flat-top axial hex: 6 directions (dq, dr)
-// Index order: up(0), upper-right(1), lower-right(2), down(3), lower-left(4), upper-left(5)
-const hexDirs = [
-  (0, -1),  // 0: up
-  (1, -1),  // 1: upper-right
-  (1, 0),   // 2: lower-right
-  (0, 1),   // 3: down
-  (-1, 1),  // 4: lower-left
-  (-1, 0),  // 5: upper-left
-];
+// Flat-top axial hex: 6 directions
+// Order: up(0), upper-right(1), lower-right(2), down(3), lower-left(4), upper-left(5)
+const _dq = [0, 1, 1, 0, -1, -1];
+const _dr = [-1, -1, 0, 1, 1, 0];
 
 /// Step [steps] times in direction [dir] from [pos].
 HexPos hexStep(HexPos pos, int dir, [int steps = 1]) {
-  final d = hexDirs[dir % 6];
-  return HexPos(pos.q + d.$1 * steps, pos.r + d.$2 * steps);
+  final d = dir % 6;
+  return HexPos(pos.q + _dq[d] * steps, pos.r + _dr[d] * steps);
 }
 
 /// Forward directions from [dir] in priority order:
@@ -30,13 +24,16 @@ List<int> forwardDirs(int dir) => [
 /// Next position for a straight chain continuation (1 step in [growthDir]).
 HexPos chainNextPos(HexPos from, int growthDir) => hexStep(from, growthDir);
 
+class BranchSlot {
+  final HexPos pos;
+  final int dir;
+  const BranchSlot(this.pos, this.dir);
+}
+
 /// Find start position and direction for a new branch from [from].
 ///
 /// Branches start 2 steps away to guarantee non-adjacency with siblings.
-/// [parentGrowthDir]: direction the branch point grows into.
-/// [usedChildDirs]: growthDirs already taken by existing children.
-/// [occupied]: all currently occupied positions.
-({HexPos pos, int dir}) nextBranchSlot({
+BranchSlot nextBranchSlot({
   required HexPos from,
   required int parentGrowthDir,
   required Set<int> usedChildDirs,
@@ -49,11 +46,10 @@ HexPos chainNextPos(HexPos from, int growthDir) => hexStep(from, growthDir);
       if (usedChildDirs.contains(dir)) continue;
       final pos = hexStep(from, dir, dist);
       if (!occupied.contains(pos)) {
-        return (pos: pos, dir: dir);
+        return BranchSlot(pos, dir);
       }
     }
   }
 
-  // Absolute fallback (shouldn't happen)
-  return (pos: hexStep(from, parentGrowthDir, 2), dir: parentGrowthDir);
+  return BranchSlot(hexStep(from, parentGrowthDir, 2), parentGrowthDir);
 }

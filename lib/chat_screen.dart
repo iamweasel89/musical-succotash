@@ -67,12 +67,12 @@ class _ChatScreenState extends State<ChatScreen> {
   Set<HexPos> get _occupied =>
       widget.model.nodes.map((n) => n.position).toSet();
 
-  ({HexPos pos, int dir}) _continuationSlot(Node lastNode) {
+  BranchSlot _continuationSlot(Node lastNode) {
     final pos = chainNextPos(lastNode.position, lastNode.growthDir);
-    return (pos: pos, dir: lastNode.growthDir);
+    return BranchSlot(pos, lastNode.growthDir);
   }
 
-  ({HexPos pos, int dir}) _branchSlot(Node branchPoint) {
+  BranchSlot _branchSlot(Node branchPoint) {
     final usedDirs = widget.model.edges
         .where((e) => e.fromId == branchPoint.id)
         .map((e) => widget.model.nodeById(e.toId))
@@ -95,14 +95,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _inputCtrl.clear();
     setState(() => _sending = true);
 
-    final ({HexPos pos, int dir}) textSlot;
+    final BranchSlot textSlot;
 
     if (_chainPath.isEmpty) {
       final startPos = HexPos(0, 0);
       final occ = _occupied;
-      textSlot = (
-        pos: occ.contains(startPos) ? chainNextPos(startPos, 0) : startPos,
-        dir: 0,
+      textSlot = BranchSlot(
+        occ.contains(startPos) ? chainNextPos(startPos, 0) : startPos,
+        0,
       );
     } else {
       final lastNode = widget.model.nodeById(_chainPath.last)!;
