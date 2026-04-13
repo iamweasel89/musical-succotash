@@ -145,7 +145,7 @@ class _CanvasViewState extends State<CanvasView>
   }
 
   void _savePanZoom() {
-    widget.model.saveCanvasPanZoom(_pan, _scale);
+    widget.model.saveCanvasPanZoom(_pan.dx, _pan.dy, _scale);
   }
 
   // ── Gestures ──────────────────────────────────────────────────────────────

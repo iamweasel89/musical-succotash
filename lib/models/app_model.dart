@@ -150,10 +150,10 @@ class AppModel extends ChangeNotifier {
   }
 
   /// Save pan/zoom without triggering a full rebuild.
-  void saveCanvasPanZoom(Offset pan, double zoom) {
+  void saveCanvasPanZoom(double panX, double panY, double zoom) {
     activeCanvas
-      ..panX = pan.dx
-      ..panY = pan.dy
+      ..panX = panX
+      ..panY = panY
       ..zoom = zoom;
     _box.put(
         'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
