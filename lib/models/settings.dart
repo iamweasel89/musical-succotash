@@ -5,6 +5,7 @@ class GlobalSettings {
   String defaultSystemPrompt;
   bool streamingMode;
   bool showNodeLabels;
+  bool renderMarkdown;
 
   // Default API node settings
   String defaultProvider;
@@ -16,6 +17,14 @@ class GlobalSettings {
   bool compactChat;
   int compactLines;
 
+  // Token usage totals (cumulative)
+  int tokensInAnthropicTotal;
+  int tokensOutAnthropicTotal;
+  int tokensInOpenaiTotal;
+  int tokensOutOpenaiTotal;
+  int tokensInDeepseekTotal;
+  int tokensOutDeepseekTotal;
+
   GlobalSettings({
     this.anthropicKey = '',
     this.openAiKey = '',
@@ -23,12 +32,19 @@ class GlobalSettings {
     this.defaultSystemPrompt = '',
     this.streamingMode = false,
     this.showNodeLabels = true,
+    this.renderMarkdown = false,
     this.defaultProvider = 'deepseek',
     this.defaultModel = 'deepseek-chat',
     this.defaultMaxTokens = 1024,
     this.defaultTemperature = 0.7,
     this.compactChat = false,
     this.compactLines = 5,
+    this.tokensInAnthropicTotal = 0,
+    this.tokensOutAnthropicTotal = 0,
+    this.tokensInOpenaiTotal = 0,
+    this.tokensOutOpenaiTotal = 0,
+    this.tokensInDeepseekTotal = 0,
+    this.tokensOutDeepseekTotal = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -38,12 +54,19 @@ class GlobalSettings {
         'defaultSystemPrompt': defaultSystemPrompt,
         'streamingMode': streamingMode,
         'showNodeLabels': showNodeLabels,
+        'renderMarkdown': renderMarkdown,
         'defaultProvider': defaultProvider,
         'defaultModel': defaultModel,
         'defaultMaxTokens': defaultMaxTokens,
         'defaultTemperature': defaultTemperature,
         'compactChat': compactChat,
         'compactLines': compactLines,
+        'tokensInAnthropicTotal': tokensInAnthropicTotal,
+        'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
+        'tokensInOpenaiTotal': tokensInOpenaiTotal,
+        'tokensOutOpenaiTotal': tokensOutOpenaiTotal,
+        'tokensInDeepseekTotal': tokensInDeepseekTotal,
+        'tokensOutDeepseekTotal': tokensOutDeepseekTotal,
       };
 
   factory GlobalSettings.fromJson(Map<String, dynamic> j) => GlobalSettings(
@@ -53,11 +76,18 @@ class GlobalSettings {
         defaultSystemPrompt: j['defaultSystemPrompt'] as String? ?? '',
         streamingMode: j['streamingMode'] as bool? ?? false,
         showNodeLabels: j['showNodeLabels'] as bool? ?? true,
+        renderMarkdown: j['renderMarkdown'] as bool? ?? false,
         defaultProvider: j['defaultProvider'] as String? ?? 'deepseek',
         defaultModel: j['defaultModel'] as String? ?? 'deepseek-chat',
         defaultMaxTokens: j['defaultMaxTokens'] as int? ?? 1024,
         defaultTemperature: (j['defaultTemperature'] as num?)?.toDouble() ?? 0.7,
         compactChat: j['compactChat'] as bool? ?? false,
         compactLines: j['compactLines'] as int? ?? 5,
+        tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
+        tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
+        tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,
+        tokensOutOpenaiTotal: j['tokensOutOpenaiTotal'] as int? ?? 0,
+        tokensInDeepseekTotal: j['tokensInDeepseekTotal'] as int? ?? 0,
+        tokensOutDeepseekTotal: j['tokensOutDeepseekTotal'] as int? ?? 0,
       );
 }

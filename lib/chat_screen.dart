@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'models/app_model.dart';
 import 'models/edge.dart';
@@ -132,6 +133,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = raw[0].toUpperCase() + raw.substring(1);
     _inputCtrl.clear();
     setState(() => _sending = true);
+    widget.model.snapshot('Отправить сообщение');
 
     final BranchSlot textSlot;
 
@@ -220,9 +222,10 @@ class _ChatScreenState extends State<ChatScreen> {
         );
         _scrollToBottom();
       },
-      onComplete: (result, _) {
+      onComplete: (result, stats) {
         if (!mounted) return;
         widget.model.updateNode(apiNode.copyWith(status: NodeStatus.done, text: result));
+        widget.model.addTokenUsage(apiSettings.provider, stats.inputTokens, stats.outputTokens);
         _scrollToBottom();
       },
       onError: (error) {
@@ -279,6 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _branchFromText(Node textNode, int chainIndex) {
+    widget.model.snapshot('Ветвление');
     final slot = _branchSlot(textNode);
     final apiNode = Node(
       type: NodeType.api,
@@ -305,6 +309,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _branchFromApi(int chainIndex) {
+    widget.model.snapshot('Ветвление');
     setState(() => _chainPath.removeRange(chainIndex + 1, _chainPath.length));
     _saveChain();
   }
@@ -519,6 +524,7 @@ class _ChatScreenState extends State<ChatScreen> {
           siblingIndex: siblingIndex < 0 ? 0 : siblingIndex,
           isCollapsed: _isNodeCollapsed(node.id),
           maxLines: widget.model.settings.compactLines,
+          renderMarkdown: widget.model.settings.renderMarkdown,
           onDoubleTap: () => _toggleNodeCollapse(node.id),
           onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
           onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
@@ -584,6 +590,7 @@ class _ChatBubble extends StatelessWidget {
   final int siblingIndex;
   final bool isCollapsed;
   final int maxLines;
+  final bool renderMarkdown;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
@@ -600,6 +607,7 @@ class _ChatBubble extends StatelessWidget {
     this.siblingIndex = 0,
     this.isCollapsed = false,
     this.maxLines = 5,
+    this.renderMarkdown = false,
     this.onDoubleTap,
     this.onSwipeLeft,
     this.onSwipeRight,
@@ -633,11 +641,19 @@ class _ChatBubble extends StatelessWidget {
             overflow: isCollapsed ? TextOverflow.ellipsis : null,
           );
         default:
-          content = Text(
-            node.text,
-            maxLines: isCollapsed ? maxLines : null,
-            overflow: isCollapsed ? TextOverflow.ellipsis : null,
-          );
+          if (!isCollapsed && renderMarkdown && node.status == NodeStatus.done && node.text.isNotEmpty) {
+            content = MarkdownBody(
+              data: node.text,
+              selectable: true,
+              softLineBreak: true,
+            );
+          } else {
+            content = Text(
+              node.text,
+              maxLines: isCollapsed ? maxLines : null,
+              overflow: isCollapsed ? TextOverflow.ellipsis : null,
+            );
+          }
       }
     } else {
       content = Text(

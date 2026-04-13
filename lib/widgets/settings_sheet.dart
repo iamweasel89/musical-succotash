@@ -3,6 +3,33 @@ import 'package:flutter/material.dart';
 import '../models/settings.dart';
 import '../services/updater.dart';
 
+// ── Usage helpers ─────────────────────────────────────────────────────────
+
+const _pricePerMToken = {
+  'anthropic': (3.0, 15.0),   // input, output USD per 1M tokens
+  'openai':    (2.5, 10.0),
+  'deepseek':  (0.27, 1.10),
+};
+
+double _usageCost(String p, int inTok, int outTok) {
+  final pr = _pricePerMToken[p];
+  if (pr == null) return 0;
+  return inTok / 1e6 * pr.$1 + outTok / 1e6 * pr.$2;
+}
+
+String _fmtTokens(int n) {
+  if (n < 1000) return '$n';
+  final s = n.toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+    buf.write(s[i]);
+  }
+  return buf.toString();
+}
+
+String _fmtCost(double usd) => '\$${usd.toStringAsFixed(4)}';
+
 class SettingsSheet extends StatefulWidget {
   final GlobalSettings settings;
   final VoidCallback onChanged;
@@ -37,6 +64,67 @@ class _SettingsSheetState extends State<SettingsSheet> {
 
   void _save() => widget.onChanged();
 
+  List<Widget> _buildUsageRows(GlobalSettings s) {
+    final data = [
+      ('Anthropic', 'anthropic', s.tokensInAnthropicTotal, s.tokensOutAnthropicTotal),
+      ('OpenAI',    'openai',    s.tokensInOpenaiTotal,    s.tokensOutOpenaiTotal),
+      ('DeepSeek',  'deepseek',  s.tokensInDeepseekTotal,  s.tokensOutDeepseekTotal),
+    ];
+    double totalCost = 0;
+    final rows = <Widget>[];
+    for (final (name, key, inTok, outTok) in data) {
+      final cost = _usageCost(key, inTok, outTok);
+      totalCost += cost;
+      rows.add(Row(
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(name, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(
+              '${_fmtTokens(inTok)} in + ${_fmtTokens(outTok)} out',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ),
+          Text(_fmtCost(cost),
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+        ],
+      ));
+    }
+    rows.add(const Divider(height: 12));
+    rows.add(Row(
+      children: [
+        const SizedBox(width: 76),
+        const Expanded(
+          child: Text('Итого',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ),
+        Text(_fmtCost(totalCost),
+            style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w600)),
+      ],
+    ));
+    rows.add(const SizedBox(height: 8));
+    rows.add(OutlinedButton(
+      onPressed: () {
+        setState(() {
+          s.tokensInAnthropicTotal = 0;
+          s.tokensOutAnthropicTotal = 0;
+          s.tokensInOpenaiTotal = 0;
+          s.tokensOutOpenaiTotal = 0;
+          s.tokensInDeepseekTotal = 0;
+          s.tokensOutDeepseekTotal = 0;
+        });
+        _save();
+      },
+      child: const Text('Сбросить статистику'),
+    ));
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.settings;
@@ -65,6 +153,14 @@ class _SettingsSheetState extends State<SettingsSheet> {
               value: s.streamingMode,
               onChanged: (v) {
                 setState(() => s.streamingMode = v);
+                _save();
+              },
+            ),
+            _SwitchRow(
+              label: 'Markdown в ответах',
+              value: s.renderMarkdown,
+              onChanged: (v) {
+                setState(() => s.renderMarkdown = v);
                 _save();
               },
             ),
@@ -195,6 +291,11 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 ),
               ],
             ),
+            const Divider(height: 24),
+            const Text('Использование API',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ..._buildUsageRows(s),
             if (widget.onClearAll != null) ...[
               const Divider(height: 24),
               SizedBox(

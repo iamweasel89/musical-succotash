@@ -245,6 +245,7 @@ Future<void> _runStreaming({
             ...messages,
           ],
           if (stream) 'stream': true,
+          if (stream) 'stream_options': {'include_usage': true},
         },
       );
 

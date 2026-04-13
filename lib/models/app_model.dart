@@ -93,6 +93,13 @@ class AppModel extends ChangeNotifier {
         settings.defaultTemperature = s.defaultTemperature;
         settings.compactChat = s.compactChat;
         settings.compactLines = s.compactLines;
+        settings.renderMarkdown = s.renderMarkdown;
+        settings.tokensInAnthropicTotal = s.tokensInAnthropicTotal;
+        settings.tokensOutAnthropicTotal = s.tokensOutAnthropicTotal;
+        settings.tokensInOpenaiTotal = s.tokensInOpenaiTotal;
+        settings.tokensOutOpenaiTotal = s.tokensOutOpenaiTotal;
+        settings.tokensInDeepseekTotal = s.tokensInDeepseekTotal;
+        settings.tokensOutDeepseekTotal = s.tokensOutDeepseekTotal;
       }
       _loadHistory();
     } catch (_) {}
@@ -221,4 +228,35 @@ class AppModel extends ChangeNotifier {
       .map((e) => nodeById(e.fromId))
       .whereType<Node>()
       .toList();
+
+  void notifySettingsChanged() {
+    save();
+    notifyListeners();
+  }
+
+  void addTokenUsage(String provider, int input, int output) {
+    switch (provider) {
+      case 'anthropic':
+        settings.tokensInAnthropicTotal += input;
+        settings.tokensOutAnthropicTotal += output;
+      case 'openai':
+        settings.tokensInOpenaiTotal += input;
+        settings.tokensOutOpenaiTotal += output;
+      case 'deepseek':
+        settings.tokensInDeepseekTotal += input;
+        settings.tokensOutDeepseekTotal += output;
+    }
+    save();
+  }
+
+  void resetTokenUsage() {
+    settings.tokensInAnthropicTotal = 0;
+    settings.tokensOutAnthropicTotal = 0;
+    settings.tokensInOpenaiTotal = 0;
+    settings.tokensOutOpenaiTotal = 0;
+    settings.tokensInDeepseekTotal = 0;
+    settings.tokensOutDeepseekTotal = 0;
+    save();
+    notifyListeners();
+  }
 }
