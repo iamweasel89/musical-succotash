@@ -7,11 +7,52 @@ import 'edge.dart';
 import 'node.dart';
 import 'settings.dart';
 
+// ── History entry ──────────────────────────────────────────────────────────
+
+class HistoryEntry {
+  final String description;
+  final String nodesJson;
+  final String edgesJson;
+  final String chainJson;
+
+  const HistoryEntry({
+    required this.description,
+    required this.nodesJson,
+    required this.edgesJson,
+    required this.chainJson,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'd': description,
+        'n': nodesJson,
+        'e': edgesJson,
+        'c': chainJson,
+      };
+
+  factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
+        description: j['d'] as String? ?? '',
+        nodesJson: j['n'] as String? ?? '[]',
+        edgesJson: j['e'] as String? ?? '[]',
+        chainJson: j['c'] as String? ?? '[]',
+      );
+}
+
+// ── Model ──────────────────────────────────────────────────────────────────
+
 class AppModel extends ChangeNotifier {
   final List<Node> nodes = [];
   final List<Edge> edges = [];
   final List<String> chainPath = [];
   final GlobalSettings settings = GlobalSettings();
+
+  final _undoStack = <HistoryEntry>[];
+  final _redoStack = <HistoryEntry>[];
+  static const _maxHistory = 30;
+
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
+  List<HistoryEntry> get undoStack => List.unmodifiable(_undoStack);
+  List<HistoryEntry> get redoStack => List.unmodifiable(_redoStack);
 
   Box<String> get _box => Hive.box<String>('state');
 
@@ -53,6 +94,7 @@ class AppModel extends ChangeNotifier {
         settings.compactChat = s.compactChat;
         settings.compactLines = s.compactLines;
       }
+      _loadHistory();
     } catch (_) {}
   }
 
@@ -61,6 +103,73 @@ class AppModel extends ChangeNotifier {
     _box.put('edges', jsonEncode(edges.map((e) => e.toJson()).toList()));
     _box.put('chainPath', jsonEncode(chainPath));
     _box.put('settings', jsonEncode(settings.toJson()));
+  }
+
+  // ── History ────────────────────────────────────────────────────────────────
+
+  void snapshot(String description) {
+    _undoStack.add(_capture(description));
+    if (_undoStack.length > _maxHistory) _undoStack.removeAt(0);
+    _redoStack.clear();
+    _saveHistory();
+  }
+
+  void undo() {
+    if (_undoStack.isEmpty) return;
+    _redoStack.add(_capture(''));
+    _applyEntry(_undoStack.removeLast());
+  }
+
+  void redo() {
+    if (_redoStack.isEmpty) return;
+    _undoStack.add(_capture(''));
+    _applyEntry(_redoStack.removeLast());
+  }
+
+  HistoryEntry _capture(String desc) => HistoryEntry(
+        description: desc,
+        nodesJson: jsonEncode(nodes.map((n) => n.toJson()).toList()),
+        edgesJson: jsonEncode(edges.map((e) => e.toJson()).toList()),
+        chainJson: jsonEncode(chainPath),
+      );
+
+  void _applyEntry(HistoryEntry entry) {
+    nodes
+      ..clear()
+      ..addAll((jsonDecode(entry.nodesJson) as List)
+          .map((j) => Node.fromJson(j as Map<String, dynamic>)));
+    edges
+      ..clear()
+      ..addAll((jsonDecode(entry.edgesJson) as List)
+          .map((j) => Edge.fromJson(j as Map<String, dynamic>)));
+    chainPath
+      ..clear()
+      ..addAll((jsonDecode(entry.chainJson) as List).cast<String>());
+    save();
+    _saveHistory();
+    notifyListeners();
+  }
+
+  void _saveHistory() {
+    _box.put(
+      'history',
+      jsonEncode({
+        'u': _undoStack.map((e) => e.toJson()).toList(),
+        'r': _redoStack.map((e) => e.toJson()).toList(),
+      }),
+    );
+  }
+
+  void _loadHistory() {
+    final raw = _box.get('history');
+    if (raw == null) return;
+    try {
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      _undoStack.addAll((j['u'] as List? ?? [])
+          .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>)));
+      _redoStack.addAll((j['r'] as List? ?? [])
+          .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>)));
+    } catch (_) {}
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────────

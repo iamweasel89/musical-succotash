@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -56,6 +57,13 @@ class _ChatScreenState extends State<ChatScreen> {
       _globalCollapse = !_globalCollapse;
       _collapsedOverrides.clear();
     });
+  }
+
+  // Sync local _chainPath from model (needed after undo/redo)
+  void _syncChainPath() {
+    if (listEquals(_chainPath, widget.model.chainPath)) return;
+    _chainPath..clear()..addAll(widget.model.chainPath);
+    _collapsedOverrides.clear();
   }
 
   void _saveChain() {
@@ -337,7 +345,7 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Удалить ветку?'),
-        content: const Text('Эта нода и все что от неё будут удалены.'),
+        content: const Text('Эта нода и все что от неё будут удалены. Можно отменить через ↩.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -352,7 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     if (ok != true) return;
 
-    // BFS: collect all descendant node IDs from this point
+    // BFS: collect only the selected branch and its descendants
     final toDelete = <String>{};
     final queue = <String>[_chainPath[chainIndex]];
     while (queue.isNotEmpty) {
@@ -365,9 +373,22 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    setState(() => _chainPath.removeRange(chainIndex, _chainPath.length));
-    _saveChain();
-    widget.model.removeNodes(toDelete);
+    // Find a sibling to switch to after deletion
+    final siblings = _siblingsOf(chainIndex);
+    final remaining = siblings.where((id) => !toDelete.contains(id)).toList();
+
+    // Snapshot for undo before any mutation
+    widget.model.snapshot('Удалить ветку');
+
+    // Update chain: truncate, then switch to sibling if available
+    _chainPath.removeRange(chainIndex, _chainPath.length);
+    if (remaining.isNotEmpty) {
+      _chainPath.addAll(_followChain(remaining.first));
+    }
+
+    setState(() {});
+    widget.model.chainPath..clear()..addAll(_chainPath);
+    widget.model.removeNodes(toDelete); // saves + notifies
   }
 
   void _switchBranch(int chainIndex, int delta) {
@@ -417,41 +438,60 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(
-        children: [
-          Expanded(
-            child: ListenableBuilder(
-              listenable: widget.model,
-              builder: (context, _) => _buildList(),
-            ),
-          ),
-          if (_chainPath.isNotEmpty) _buildChatToolbar(),
-          _buildInputBar(),
-        ],
+      child: ListenableBuilder(
+        listenable: widget.model,
+        builder: (context, _) {
+          _syncChainPath();
+          return Column(
+            children: [
+              Expanded(child: _buildList()),
+              if (_chainPath.isNotEmpty) _buildChatToolbar(),
+              _buildInputBar(),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildChatToolbar() {
     return Padding(
-      padding: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          IconButton(
-            icon: Icon(
-              _globalCollapse ? Icons.unfold_more : Icons.unfold_less,
-              size: 18,
+          _ToolBtn(
+            icon: Icons.undo,
+            tooltip: widget.model.canUndo
+                ? 'Отменить: ${widget.model.undoStack.last.description}'
+                : 'Нечего отменять',
+            onTap: widget.model.canUndo ? widget.model.undo : null,
+          ),
+          _ToolBtn(
+            icon: Icons.redo,
+            tooltip: widget.model.canRedo ? 'Повторить' : 'Нечего повторять',
+            onTap: widget.model.canRedo ? widget.model.redo : null,
+          ),
+          if (widget.model.canUndo)
+            _ToolBtn(
+              icon: Icons.history,
+              tooltip: 'История',
+              onTap: () => _showHistory(),
             ),
+          const Spacer(),
+          _ToolBtn(
+            icon: _globalCollapse ? Icons.unfold_more : Icons.unfold_less,
             tooltip: _globalCollapse ? 'Развернуть все' : 'Свернуть все',
-            onPressed: _toggleAll,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            visualDensity: VisualDensity.compact,
-            color: Colors.grey[600],
+            onTap: _toggleAll,
           ),
         ],
       ),
+    );
+  }
+
+  void _showHistory() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => _HistorySheet(model: widget.model),
     );
   }
 
@@ -723,6 +763,101 @@ class _Btn extends StatelessWidget {
       constraints: const BoxConstraints(),
       visualDensity: VisualDensity.compact,
       color: color ?? Colors.grey[600],
+    );
+  }
+}
+
+// ── Toolbar button (larger, supports null = disabled) ─────────────────────
+
+class _ToolBtn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  const _ToolBtn({required this.icon, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 18),
+      tooltip: tooltip,
+      onPressed: onTap,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(),
+      visualDensity: VisualDensity.compact,
+      color: onTap != null ? Colors.grey[700] : Colors.grey[400],
+    );
+  }
+}
+
+// ── History sheet ─────────────────────────────────────────────────────────
+
+class _HistorySheet extends StatelessWidget {
+  final AppModel model;
+  const _HistorySheet({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final stack = model.undoStack.reversed.toList();
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            width: 32, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(children: [
+              Text('История изменений',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ]),
+          ),
+          if (stack.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('Нет записей', style: TextStyle(color: Colors.grey)),
+            )
+          else
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: stack.length,
+                itemBuilder: (_, i) => ListTile(
+                  leading: Icon(Icons.history,
+                      size: 18, color: Colors.grey[500]),
+                  title: Text(stack[i].description.isEmpty
+                      ? '—'
+                      : stack[i].description,
+                      style: const TextStyle(fontSize: 14)),
+                  dense: true,
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (model.canUndo)
+                  TextButton.icon(
+                    icon: const Icon(Icons.undo, size: 16),
+                    label: const Text('Отменить шаг'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      model.undo();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

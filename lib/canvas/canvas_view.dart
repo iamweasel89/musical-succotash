@@ -139,6 +139,7 @@ class _CanvasViewState extends State<CanvasView>
         _CanvasToolbar(
           onFitAll: _fitAll,
           onCenter: _centerOnOrigin,
+          model: widget.model,
         ),
         // Canvas area
         Expanded(
@@ -199,26 +200,49 @@ class _CanvasViewState extends State<CanvasView>
 class _CanvasToolbar extends StatelessWidget {
   final VoidCallback onFitAll;
   final VoidCallback onCenter;
+  final AppModel model;
 
-  const _CanvasToolbar({required this.onFitAll, required this.onCenter});
+  const _CanvasToolbar({
+    required this.onFitAll,
+    required this.onCenter,
+    required this.model,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      elevation: 1,
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.zoom_out_map),
-            tooltip: 'Fit all',
-            onPressed: onFitAll,
-          ),
-          IconButton(
-            icon: const Icon(Icons.center_focus_strong),
-            tooltip: 'Centre on origin',
-            onPressed: onCenter,
-          ),
-        ],
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, __) => Material(
+        elevation: 1,
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.undo, size: 20),
+              tooltip: model.canUndo
+                  ? 'Отменить: ${model.undoStack.last.description}'
+                  : 'Нечего отменять',
+              onPressed: model.canUndo ? model.undo : null,
+              color: model.canUndo ? null : Colors.grey[400],
+            ),
+            IconButton(
+              icon: const Icon(Icons.redo, size: 20),
+              tooltip: model.canRedo ? 'Повторить' : 'Нечего повторять',
+              onPressed: model.canRedo ? model.redo : null,
+              color: model.canRedo ? null : Colors.grey[400],
+            ),
+            const VerticalDivider(width: 8),
+            IconButton(
+              icon: const Icon(Icons.zoom_out_map),
+              tooltip: 'Fit all',
+              onPressed: onFitAll,
+            ),
+            IconButton(
+              icon: const Icon(Icons.center_focus_strong),
+              tooltip: 'Centre on origin',
+              onPressed: onCenter,
+            ),
+          ],
+        ),
       ),
     );
   }
