@@ -3,6 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import 'models/app_model.dart';
+import 'models/edge.dart';
+import 'models/hex_layout.dart';
+import 'models/hex_pos.dart';
+import 'models/node.dart';
+import 'services/api_runner.dart';
+import 'widgets/api_node_sheet.dart';
+
 // ── Emoji stripping ───────────────────────────────────────────────────────
 
 bool _isEmojiCodePoint(int r) =>
@@ -14,14 +22,6 @@ bool _isEmojiCodePoint(int r) =>
 
 String _stripEmoji(String s) =>
     String.fromCharCodes(s.runes.where((r) => !_isEmojiCodePoint(r)));
-
-import 'models/app_model.dart';
-import 'models/edge.dart';
-import 'models/hex_layout.dart';
-import 'models/hex_pos.dart';
-import 'models/node.dart';
-import 'services/api_runner.dart';
-import 'widgets/api_node_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
   final AppModel model;
