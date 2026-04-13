@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'canvas/canvas_view.dart';
 import 'chat_screen.dart';
 import 'models/app_model.dart';
 import 'widgets/settings_sheet.dart';
@@ -42,7 +43,7 @@ class _MainScreenState extends State<MainScreen> {
         index: _tab,
         children: [
           ChatScreen(model: widget.model),
-          const _CanvasPlaceholder(),
+          CanvasView(model: widget.model),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -57,13 +58,3 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class _CanvasPlaceholder extends StatelessWidget {
-  const _CanvasPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Canvas', style: TextStyle(color: Colors.grey, fontSize: 16)),
-    );
-  }
-}
