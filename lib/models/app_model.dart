@@ -86,6 +86,13 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeNodes(Set<String> ids) {
+    nodes.removeWhere((n) => ids.contains(n.id));
+    edges.removeWhere((e) => ids.contains(e.fromId) || ids.contains(e.toId));
+    save();
+    notifyListeners();
+  }
+
   // ── Queries ────────────────────────────────────────────────────────────────
   Node? nodeById(String id) {
     for (final n in nodes) {

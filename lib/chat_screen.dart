@@ -293,6 +293,44 @@ class _ChatScreenState extends State<ChatScreen> {
     return result;
   }
 
+  Future<void> _deleteBranch(int chainIndex) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить ветку?'),
+        content: const Text('Эта нода и все что от неё будут удалены.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    // BFS: collect all descendant node IDs from this point
+    final toDelete = <String>{};
+    final queue = <String>[_chainPath[chainIndex]];
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      toDelete.add(current);
+      for (final e in widget.model.edges) {
+        if (e.fromId == current && !toDelete.contains(e.toId)) {
+          queue.add(e.toId);
+        }
+      }
+    }
+
+    setState(() => _chainPath.removeRange(chainIndex, _chainPath.length));
+    _saveChain();
+    widget.model.removeNodes(toDelete);
+  }
+
   void _switchBranch(int chainIndex, int delta) {
     final siblings = _siblingsOf(chainIndex);
     if (siblings.length <= 1) return;
@@ -370,6 +408,8 @@ class _ChatScreenState extends State<ChatScreen> {
         if (node == null) return const SizedBox.shrink();
         final siblings = _siblingsOf(i);
         final siblingIndex = siblings.indexOf(_chainPath[i]);
+        final isLast = i == _chainPath.length - 1;
+        final isApi = node.type == NodeType.api;
         return _ChatBubble(
           node: node,
           siblingCount: siblings.length,
@@ -377,14 +417,17 @@ class _ChatScreenState extends State<ChatScreen> {
           onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
           onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
           onCopy: () => _copyNode(node),
-          onEdit: node.type == NodeType.text ? () => _editNode(node, i) : null,
-          onBranch: node.type == NodeType.text
-              ? () => _branchFromText(node, i)
-              : () => _branchFromApi(i),
-          onRetry: node.type == NodeType.api ? () => _retryNode(node) : null,
-          onSettings: node.type == NodeType.api
-              ? () => _showNodeSettings(node, i)
+          onEdit: !isApi ? () => _editNode(node, i) : null,
+          // ⎇ hidden on last API node (input field already continues from there)
+          onBranch: isApi && isLast
+              ? null
+              : (isApi ? () => _branchFromApi(i) : () => _branchFromText(node, i)),
+          // ↺ only on last API node or on error
+          onRetry: isApi && (isLast || node.status == NodeStatus.error)
+              ? () => _retryNode(node)
               : null,
+          onSettings: isApi ? () => _showNodeSettings(node, i) : null,
+          onDeleteBranch: () => _deleteBranch(i),
         );
       },
     );
@@ -437,9 +480,10 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onSwipeRight;
   final VoidCallback onCopy;
   final VoidCallback? onEdit;
-  final VoidCallback onBranch;
+  final VoidCallback? onBranch;
   final VoidCallback? onRetry;
   final VoidCallback? onSettings;
+  final VoidCallback? onDeleteBranch;
 
   const _ChatBubble({
     required this.node,
@@ -449,9 +493,10 @@ class _ChatBubble extends StatelessWidget {
     this.onSwipeRight,
     required this.onCopy,
     this.onEdit,
-    required this.onBranch,
+    this.onBranch,
     this.onRetry,
     this.onSettings,
+    this.onDeleteBranch,
   });
 
   @override
@@ -528,6 +573,7 @@ class _ChatBubble extends StatelessWidget {
               onBranch: onBranch,
               onRetry: onRetry,
               onSettings: onSettings,
+              onDeleteBranch: onDeleteBranch,
             ),
           ],
         ),
@@ -539,16 +585,18 @@ class _ChatBubble extends StatelessWidget {
 class _ActionRow extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback? onEdit;
-  final VoidCallback onBranch;
+  final VoidCallback? onBranch;
   final VoidCallback? onRetry;
   final VoidCallback? onSettings;
+  final VoidCallback? onDeleteBranch;
 
   const _ActionRow({
     required this.onCopy,
     this.onEdit,
-    required this.onBranch,
+    this.onBranch,
     this.onRetry,
     this.onSettings,
+    this.onDeleteBranch,
   });
 
   @override
@@ -559,11 +607,14 @@ class _ActionRow extends StatelessWidget {
         _Btn(icon: Icons.copy_outlined, tooltip: 'Копировать', onTap: onCopy),
         if (onEdit != null)
           _Btn(icon: Icons.edit_outlined, tooltip: 'Редактировать', onTap: onEdit!),
-        _Btn(icon: Icons.call_split, tooltip: 'Ветвление', onTap: onBranch),
+        if (onBranch != null)
+          _Btn(icon: Icons.call_split, tooltip: 'Ветвление', onTap: onBranch!),
         if (onRetry != null)
           _Btn(icon: Icons.replay, tooltip: 'Повторить', onTap: onRetry!),
         if (onSettings != null)
           _Btn(icon: Icons.more_horiz, tooltip: 'Настройки', onTap: onSettings!),
+        if (onDeleteBranch != null)
+          _Btn(icon: Icons.delete_outline, tooltip: 'Удалить ветку', onTap: onDeleteBranch!, color: Colors.red[300]),
       ],
     );
   }
@@ -573,8 +624,9 @@ class _Btn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final Color? color;
 
-  const _Btn({required this.icon, required this.tooltip, required this.onTap});
+  const _Btn({required this.icon, required this.tooltip, required this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -585,7 +637,7 @@ class _Btn extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       constraints: const BoxConstraints(),
       visualDensity: VisualDensity.compact,
-      color: Colors.grey[600],
+      color: color ?? Colors.grey[600],
     );
   }
 }
