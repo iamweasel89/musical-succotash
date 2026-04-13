@@ -308,10 +308,10 @@ class AppModel extends ChangeNotifier {
     nodes.clear();
     edges.clear();
     chainPath.clear();
-    for (final c in canvases) {
-      c.nodeIds.clear();
-      c.chainPath.clear();
-    }
+    canvases.clear();
+    final defaultCanvas = CanvasData(name: 'Canvas 1');
+    canvases.add(defaultCanvas);
+    _activeCanvasId = defaultCanvas.id;
     save();
     notifyListeners();
   }
