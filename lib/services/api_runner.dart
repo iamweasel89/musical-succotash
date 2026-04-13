@@ -3,9 +3,33 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/attachment.dart';
 import '../models/node.dart';
 import '../models/settings.dart';
 import '../widgets/api_node_sheet.dart';
+
+// ── Cancel token ────────────────────────────────────────────────────────────
+
+class CancelToken {
+  http.Client? _client;
+  bool _cancelled = false;
+
+  void _register(http.Client client) {
+    if (_cancelled) {
+      client.close();
+    } else {
+      _client = client;
+    }
+  }
+
+  void cancel() {
+    _cancelled = true;
+    _client?.close();
+    _client = null;
+  }
+
+  bool get isCancelled => _cancelled;
+}
 
 // ── Run result ─────────────────────────────────────────────────────────────
 class RunStats {
@@ -29,15 +53,17 @@ class RunStats {
 /// [onChunk]    called for each text delta (streaming mode).
 /// [onComplete] called once with the full result text + stats.
 /// [onError]    called on network/API error.
+/// [cancelToken] optional token to cancel the request mid-flight.
 Future<void> runApiNode({
   required Node node,
   String input = '',
-  List<Map<String, String>>? messages,
+  List<Map<String, dynamic>>? messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required void Function(String chunk) onChunk,
   required void Function(String result, RunStats stats) onComplete,
   required void Function(String error) onError,
+  CancelToken? cancelToken,
 }) async {
   final key = _keyFor(apiSettings.provider, settings);
   if (key.isEmpty) {
@@ -48,7 +74,10 @@ Future<void> runApiNode({
 
   final stopwatch = Stopwatch()..start();
 
-  final msgs = messages ?? [{'role': 'user', 'content': input}];
+  final msgs = messages ??
+      [
+        <String, dynamic>{'role': 'user', 'content': input}
+      ];
 
   try {
     if (settings.streamingMode) {
@@ -60,13 +89,16 @@ Future<void> runApiNode({
         onChunk: onChunk,
         onComplete: (text, inTok, outTok) {
           stopwatch.stop();
-          onComplete(text, RunStats(
-            inputTokens: inTok,
-            outputTokens: outTok,
-            elapsed: stopwatch.elapsed,
-          ));
+          onComplete(
+              text,
+              RunStats(
+                inputTokens: inTok,
+                outputTokens: outTok,
+                elapsed: stopwatch.elapsed,
+              ));
         },
         onError: onError,
+        cancelToken: cancelToken,
       );
     } else {
       await _runFull(
@@ -76,17 +108,21 @@ Future<void> runApiNode({
         key: key,
         onComplete: (text, inTok, outTok) {
           stopwatch.stop();
-          onComplete(text, RunStats(
-            inputTokens: inTok,
-            outputTokens: outTok,
-            elapsed: stopwatch.elapsed,
-          ));
+          onComplete(
+              text,
+              RunStats(
+                inputTokens: inTok,
+                outputTokens: outTok,
+                elapsed: stopwatch.elapsed,
+              ));
         },
         onError: onError,
+        cancelToken: cancelToken,
       );
     }
   } catch (e) {
     stopwatch.stop();
+    if (cancelToken?.isCancelled == true) return;
     onError('Unexpected error: $e');
   }
 }
@@ -116,21 +152,71 @@ String _effectiveSystemPrompt(GlobalSettings s) {
 
 String _keyFor(String provider, GlobalSettings s) {
   switch (provider) {
-    case 'anthropic': return s.anthropicKey;
-    case 'openai':    return s.openAiKey;
-    case 'deepseek':  return s.deepSeekKey;
-    default:          return '';
+    case 'anthropic':
+      return s.anthropicKey;
+    case 'openai':
+      return s.openAiKey;
+    case 'deepseek':
+      return s.deepSeekKey;
+    default:
+      return '';
   }
+}
+
+// ── Convert messages to provider format ────────────────────────────────────
+
+/// Converts internal message maps (with optional _attachments) to the
+/// provider-specific API format.
+List<Map<String, dynamic>> _convertMessages(
+    List<Map<String, dynamic>> messages, String provider) {
+  return messages.map((msg) {
+    final role = msg['role'] as String;
+    final text = msg['content'] as String? ?? '';
+    final attachments = msg['_attachments'] as List<Attachment>?;
+
+    if (attachments == null || attachments.isEmpty) {
+      return <String, dynamic>{'role': role, 'content': text};
+    }
+
+    // Multimodal message
+    if (provider == 'anthropic') {
+      final content = <Map<String, dynamic>>[
+        if (text.isNotEmpty) {'type': 'text', 'text': text},
+        ...attachments.where((a) => a.isImage).map((a) => {
+              'type': 'image',
+              'source': {
+                'type': 'base64',
+                'media_type': a.mimeType,
+                'data': a.base64Data,
+              },
+            }),
+      ];
+      return {'role': role, 'content': content};
+    } else {
+      // OpenAI / DeepSeek
+      final content = <Map<String, dynamic>>[
+        if (text.isNotEmpty) {'type': 'text', 'text': text},
+        ...attachments.where((a) => a.isImage).map((a) => {
+              'type': 'image_url',
+              'image_url': {
+                'url': 'data:${a.mimeType};base64,${a.base64Data}',
+              },
+            }),
+      ];
+      return {'role': role, 'content': content};
+    }
+  }).toList();
 }
 
 // ── Full (non-streaming) ────────────────────────────────────────────────────
 Future<void> _runFull({
-  required List<Map<String, String>> messages,
+  required List<Map<String, dynamic>> messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required String key,
   required void Function(String text, int inTok, int outTok) onComplete,
   required void Function(String error) onError,
+  CancelToken? cancelToken,
 }) async {
   final (uri, headers, body) = _buildRequest(
     messages: messages,
@@ -140,29 +226,38 @@ Future<void> _runFull({
     stream: false,
   );
 
-  final response = await http.post(uri, headers: headers,
-      body: jsonEncode(body));
-
-  if (response.statusCode != 200) {
-    onError('HTTP ${response.statusCode}: ${response.body}');
-    return;
+  final client = http.Client();
+  cancelToken?._register(client);
+  try {
+    final response =
+        await client.post(uri, headers: headers, body: jsonEncode(body));
+    if (cancelToken?.isCancelled == true) return;
+    if (response.statusCode != 200) {
+      onError('HTTP ${response.statusCode}: ${response.body}');
+      return;
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final (text, inTok, outTok) =
+        _parseFullResponse(json, apiSettings.provider);
+    onComplete(text, inTok, outTok);
+  } catch (e) {
+    if (cancelToken?.isCancelled == true) return;
+    onError('HTTP error: $e');
+  } finally {
+    client.close();
   }
-
-  final json = jsonDecode(response.body) as Map<String, dynamic>;
-  final (text, inTok, outTok) = _parseFullResponse(
-      json, apiSettings.provider);
-  onComplete(text, inTok, outTok);
 }
 
 // ── Streaming (SSE) ────────────────────────────────────────────────────────
 Future<void> _runStreaming({
-  required List<Map<String, String>> messages,
+  required List<Map<String, dynamic>> messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required String key,
   required void Function(String chunk) onChunk,
   required void Function(String text, int inTok, int outTok) onComplete,
   required void Function(String error) onError,
+  CancelToken? cancelToken,
 }) async {
   final (uri, headers, body) = _buildRequest(
     messages: messages,
@@ -173,6 +268,10 @@ Future<void> _runStreaming({
   );
 
   final client = http.Client();
+  cancelToken?._register(client);
+  final buffer = StringBuffer();
+  int inTok = 0, outTok = 0;
+
   try {
     final request = http.Request('POST', uri)
       ..headers.addAll(headers)
@@ -184,9 +283,6 @@ Future<void> _runStreaming({
       onError('HTTP ${streamed.statusCode}: $err');
       return;
     }
-
-    final buffer = StringBuffer();
-    int inTok = 0, outTok = 0;
 
     await for (final line in streamed.stream
         .transform(utf8.decoder)
@@ -212,6 +308,13 @@ Future<void> _runStreaming({
     }
 
     onComplete(buffer.toString(), inTok, outTok);
+  } catch (e) {
+    if (cancelToken?.isCancelled == true) {
+      // Complete with whatever partial text was streamed
+      onComplete(buffer.toString(), inTok, outTok);
+      return;
+    }
+    onError('Stream error: $e');
   } finally {
     client.close();
   }
@@ -219,7 +322,7 @@ Future<void> _runStreaming({
 
 // ── Request builder ────────────────────────────────────────────────────────
 (Uri, Map<String, String>, Map<String, dynamic>) _buildRequest({
-  required List<Map<String, String>> messages,
+  required List<Map<String, dynamic>> messages,
   required GlobalSettings settings,
   required ApiNodeSettings apiSettings,
   required String key,
@@ -227,6 +330,7 @@ Future<void> _runStreaming({
 }) {
   final provider = apiSettings.provider;
   final systemPrompt = _effectiveSystemPrompt(settings);
+  final apiMessages = _convertMessages(messages, provider);
 
   switch (provider) {
     case 'anthropic':
@@ -241,7 +345,7 @@ Future<void> _runStreaming({
           'model': apiSettings.model,
           'max_tokens': apiSettings.maxTokens,
           if (systemPrompt.isNotEmpty) 'system': systemPrompt,
-          'messages': messages,
+          'messages': apiMessages,
           if (stream) 'stream': true,
         },
       );
@@ -264,7 +368,7 @@ Future<void> _runStreaming({
           'messages': [
             if (systemPrompt.isNotEmpty)
               {'role': 'system', 'content': systemPrompt},
-            ...messages,
+            ...apiMessages,
           ],
           if (stream) 'stream': true,
           if (stream) 'stream_options': {'include_usage': true},

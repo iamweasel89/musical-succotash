@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'attachment.dart';
 import 'hex_pos.dart';
 
 enum NodeType { text, api }
@@ -21,6 +22,9 @@ class Node {
   /// disconnecting clears the slot.
   final Map<String, String> received;
 
+  /// Attachments (images / files) on text nodes, sent as multimodal content.
+  final List<Attachment> attachments;
+
   final DateTime createdAt;
   DateTime updatedAt;
 
@@ -35,11 +39,13 @@ class Node {
     required this.position,
     this.text = '',
     Map<String, String>? received,
+    List<Attachment>? attachments,
     DateTime? createdAt,
     DateTime? updatedAt,
     this.growthDir = 0,
   })  : id = id ?? const Uuid().v4(),
         received = received ?? {},
+        attachments = attachments ?? [],
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
@@ -49,6 +55,7 @@ class Node {
     HexPos? position,
     String? text,
     Map<String, String>? received,
+    List<Attachment>? attachments,
     DateTime? updatedAt,
   }) =>
       Node(
@@ -59,6 +66,7 @@ class Node {
         position: position ?? this.position,
         text: text ?? this.text,
         received: received ?? Map<String, String>.from(this.received),
+        attachments: attachments ?? List<Attachment>.from(this.attachments),
         createdAt: createdAt,
         updatedAt: updatedAt ?? DateTime.now(),
         growthDir: growthDir,
@@ -72,6 +80,7 @@ class Node {
         'position': position.toJson(),
         'text': text,
         'received': received,
+        'attachments': attachments.map((a) => a.toJson()).toList(),
         'createdAt': createdAt.millisecondsSinceEpoch,
         'updatedAt': updatedAt.millisecondsSinceEpoch,
         'growthDir': growthDir,
@@ -87,6 +96,10 @@ class Node {
         received: (j['received'] as Map<String, dynamic>?)
                 ?.map((k, v) => MapEntry(k, v as String)) ??
             {},
+        attachments: (j['attachments'] as List?)
+                ?.map((a) => Attachment.fromJson(a as Map<String, dynamic>))
+                .toList() ??
+            [],
         createdAt: j['createdAt'] != null
             ? DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int)
             : null,

@@ -36,6 +36,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollCtrl = ScrollController();
   final List<String> _chainPath = [];
   bool _sending = false;
+  CancelToken? _runToken;
 
   // Collapse state
   // When _globalCollapse=true, _collapsedOverrides = explicitly expanded nodes.
@@ -95,22 +96,31 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ── Messages builder ──────────────────────────────────────────────────────
 
-  List<Map<String, String>> _buildMessages({int upTo = -1}) {
+  List<Map<String, dynamic>> _buildMessages({int upTo = -1}) {
     final end = upTo < 0 ? _chainPath.length : upTo + 1;
-    final messages = <Map<String, String>>[];
+    final messages = <Map<String, dynamic>>[];
     for (int i = 0; i < end; i++) {
       final n = widget.model.nodeById(_chainPath[i]);
-      if (n == null || n.text.isEmpty) continue;
-      messages.add({
-        'role': n.type == NodeType.text ? 'user' : 'assistant',
-        'content': n.text,
-      });
+      if (n == null) continue;
+      if (n.text.isEmpty && n.attachments.isEmpty) continue;
+      final role = n.type == NodeType.text ? 'user' : 'assistant';
+      if (n.attachments.isEmpty) {
+        messages.add({'role': role, 'content': n.text});
+      } else {
+        messages.add({
+          'role': role,
+          'content': n.text,
+          '_attachments': n.attachments,
+        });
+      }
     }
     return messages;
   }
 
   String _buildInputPreview(int chainIndex) =>
-      _buildMessages(upTo: chainIndex).map((m) => m['content']!).join('\n\n');
+      _buildMessages(upTo: chainIndex)
+          .map((m) => m['content'] as String? ?? '')
+          .join('\n\n');
 
   // ── Placement helpers ─────────────────────────────────────────────────────
 
@@ -220,11 +230,15 @@ class _ChatScreenState extends State<ChatScreen> {
     final apiSettings = nodeApiSettings[apiNode.id] ?? ApiNodeSettings();
     widget.model.updateNode(apiNode.copyWith(status: NodeStatus.running, text: ''));
 
+    final token = CancelToken();
+    if (mounted) setState(() => _runToken = token);
+
     await runApiNode(
       node: apiNode,
       messages: messages,
       settings: widget.model.settings,
       apiSettings: apiSettings,
+      cancelToken: token,
       onChunk: (chunk) {
         if (!mounted) return;
         final current = widget.model.nodeById(apiNode.id);
@@ -245,6 +259,13 @@ class _ChatScreenState extends State<ChatScreen> {
         widget.model.updateNode(apiNode.copyWith(status: NodeStatus.error, text: error));
       },
     );
+
+    if (mounted) setState(() => _runToken = null);
+  }
+
+  void _stopGeneration() {
+    _runToken?.cancel();
+    setState(() => _runToken = null);
   }
 
   // ── Bubble actions ────────────────────────────────────────────────────────
@@ -562,6 +583,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildInputBar() {
+    final running = _runToken != null;
     return Container(
       padding: EdgeInsets.fromLTRB(
         12, 8, 12,
@@ -584,14 +606,22 @@ class _ChatScreenState extends State<ChatScreen> {
                 contentPadding:
                     EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
-              onSubmitted: (_) => _send(),
+              onSubmitted: running ? null : (_) => _send(),
             ),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.send),
-            onPressed: _sending ? null : _send,
-          ),
+          if (running)
+            IconButton(
+              icon: const Icon(Icons.stop_circle_outlined),
+              color: Colors.red[400],
+              tooltip: 'Остановить',
+              onPressed: _stopGeneration,
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.send),
+              onPressed: _sending ? null : _send,
+            ),
         ],
       ),
     );
