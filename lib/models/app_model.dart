@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'canvas_data.dart';
 import 'edge.dart';
 import 'node.dart';
 import 'settings.dart';
@@ -45,6 +46,25 @@ class AppModel extends ChangeNotifier {
   final List<String> chainPath = [];
   final GlobalSettings settings = GlobalSettings();
 
+  // ── Canvases ───────────────────────────────────────────────────────────────
+  final List<CanvasData> canvases = [];
+  String _activeCanvasId = '';
+
+  CanvasData get activeCanvas {
+    if (canvases.isEmpty) {
+      final c = CanvasData(name: 'Canvas 1');
+      canvases.add(c);
+      _activeCanvasId = c.id;
+    }
+    return canvases.firstWhere(
+      (c) => c.id == _activeCanvasId,
+      orElse: () => canvases.first,
+    );
+  }
+
+  String get activeCanvasId => _activeCanvasId;
+
+  // ── History ────────────────────────────────────────────────────────────────
   final _undoStack = <HistoryEntry>[];
   final _redoStack = <HistoryEntry>[];
   static const _maxHistory = 30;
@@ -82,15 +102,116 @@ class AppModel extends ChangeNotifier {
         _copySettings(GlobalSettings.fromJson(
             jsonDecode(settingsRaw) as Map<String, dynamic>));
       }
+
+      // Load canvases
+      final canvasesRaw = _box.get('canvases');
+      if (canvasesRaw != null) {
+        canvases.addAll(
+          (jsonDecode(canvasesRaw) as List)
+              .map((j) => CanvasData.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+      final activeIdRaw = _box.get('activeCanvasId');
+      if (activeIdRaw != null && canvases.any((c) => c.id == activeIdRaw)) {
+        _activeCanvasId = activeIdRaw;
+      } else if (canvases.isNotEmpty) {
+        _activeCanvasId = canvases.first.id;
+      }
+
+      // First run or migration: create default canvas from existing data
+      if (canvases.isEmpty) {
+        final canvas = CanvasData(
+          name: 'Canvas 1',
+          nodeIds: nodes.map((n) => n.id).toList(),
+          chainPath: List<String>.from(chainPath),
+        );
+        canvases.add(canvas);
+        _activeCanvasId = canvas.id;
+      }
+
       _loadHistory();
     } catch (_) {}
   }
 
   void save() {
+    // Sync current chainPath to active canvas before saving
+    if (canvases.isNotEmpty) {
+      activeCanvas.chainPath
+        ..clear()
+        ..addAll(chainPath);
+    }
     _box.put('nodes', jsonEncode(nodes.map((n) => n.toJson()).toList()));
     _box.put('edges', jsonEncode(edges.map((e) => e.toJson()).toList()));
     _box.put('chainPath', jsonEncode(chainPath));
+    _box.put(
+        'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
+    _box.put('activeCanvasId', _activeCanvasId);
     _box.put('settings', jsonEncode(settings.toJson()));
+  }
+
+  /// Save pan/zoom without triggering a full rebuild.
+  void saveCanvasPanZoom(Offset pan, double zoom) {
+    activeCanvas
+      ..panX = pan.dx
+      ..panY = pan.dy
+      ..zoom = zoom;
+    _box.put(
+        'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
+  }
+
+  // ── Canvas management ──────────────────────────────────────────────────────
+
+  CanvasData createCanvas() {
+    final num = canvases.length + 1;
+    final canvas = CanvasData(name: 'Canvas $num');
+    canvases.add(canvas);
+    _switchToCanvas(canvas.id);
+    save();
+    notifyListeners();
+    return canvas;
+  }
+
+  void switchCanvas(String id) {
+    if (id == _activeCanvasId) return;
+    _switchToCanvas(id);
+    save();
+    notifyListeners();
+  }
+
+  void _switchToCanvas(String id) {
+    // Persist current chainPath into old canvas
+    if (_activeCanvasId.isNotEmpty && canvases.any((c) => c.id == _activeCanvasId)) {
+      activeCanvas.chainPath
+        ..clear()
+        ..addAll(chainPath);
+    }
+    _activeCanvasId = id;
+    // Load new canvas's chainPath
+    chainPath
+      ..clear()
+      ..addAll(activeCanvas.chainPath);
+  }
+
+  void renameCanvas(String id, String newName) {
+    final idx = canvases.indexWhere((c) => c.id == id);
+    if (idx < 0) return;
+    canvases[idx].name = newName;
+    save();
+    notifyListeners();
+  }
+
+  void deleteCanvas(String id) {
+    if (canvases.length <= 1) return;
+    final idx = canvases.indexWhere((c) => c.id == id);
+    if (idx < 0) return;
+    final wasActive = _activeCanvasId == id;
+    canvases.removeAt(idx);
+    if (wasActive) {
+      final newIdx = idx < canvases.length ? idx : idx - 1;
+      _switchToCanvas(canvases[newIdx].id);
+    }
+    save();
+    notifyListeners();
   }
 
   // ── History ────────────────────────────────────────────────────────────────
@@ -161,8 +282,10 @@ class AppModel extends ChangeNotifier {
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
+
   void addNode(Node node) {
     nodes.add(node);
+    activeCanvas.nodeIds.add(node.id);
     save();
     notifyListeners();
   }
@@ -185,6 +308,10 @@ class AppModel extends ChangeNotifier {
     nodes.clear();
     edges.clear();
     chainPath.clear();
+    for (final c in canvases) {
+      c.nodeIds.clear();
+      c.chainPath.clear();
+    }
     save();
     notifyListeners();
   }
@@ -192,11 +319,15 @@ class AppModel extends ChangeNotifier {
   void removeNodes(Set<String> ids) {
     nodes.removeWhere((n) => ids.contains(n.id));
     edges.removeWhere((e) => ids.contains(e.fromId) || ids.contains(e.toId));
+    for (final c in canvases) {
+      c.nodeIds.removeWhere((id) => ids.contains(id));
+    }
     save();
     notifyListeners();
   }
 
   // ── Queries ────────────────────────────────────────────────────────────────
+
   Node? nodeById(String id) {
     for (final n in nodes) {
       if (n.id == id) return n;
@@ -210,13 +341,14 @@ class AppModel extends ChangeNotifier {
       .whereType<Node>()
       .toList();
 
-  // ── Settings copy / export / import ──────────────────────────────────────
+  // ── Settings / export / import ─────────────────────────────────────────────
 
   void _copySettings(GlobalSettings s) {
     settings.anthropicKey = s.anthropicKey;
     settings.openAiKey = s.openAiKey;
     settings.deepSeekKey = s.deepSeekKey;
     settings.defaultSystemPrompt = s.defaultSystemPrompt;
+    settings.useBuiltinSystemPrompt = s.useBuiltinSystemPrompt;
     settings.streamingMode = s.streamingMode;
     settings.showNodeLabels = s.showNodeLabels;
     settings.renderMarkdown = s.renderMarkdown;
@@ -240,6 +372,8 @@ class AppModel extends ChangeNotifier {
         'nodes': nodes.map((n) => n.toJson()).toList(),
         'edges': edges.map((e) => e.toJson()).toList(),
         'chainPath': chainPath,
+        'canvases': canvases.map((c) => c.toJson()).toList(),
+        'activeCanvasId': _activeCanvasId,
         'settings': settings.toJson(),
       });
 
@@ -256,14 +390,29 @@ class AppModel extends ChangeNotifier {
     chainPath
       ..clear()
       ..addAll((data['chainPath'] as List).cast<String>());
+    canvases.clear();
+    final canvasesData = data['canvases'] as List?;
+    if (canvasesData != null && canvasesData.isNotEmpty) {
+      canvases.addAll(canvasesData
+          .map((j) => CanvasData.fromJson(j as Map<String, dynamic>)));
+      _activeCanvasId =
+          data['activeCanvasId'] as String? ?? canvases.first.id;
+    } else {
+      // Old export without canvases: create default
+      final canvas = CanvasData(
+        name: 'Canvas 1',
+        nodeIds: nodes.map((n) => n.id).toList(),
+        chainPath: List<String>.from(chainPath),
+      );
+      canvases.add(canvas);
+      _activeCanvasId = canvas.id;
+    }
     final s = data['settings'] as Map<String, dynamic>?;
     if (s != null) _copySettings(GlobalSettings.fromJson(s));
     save();
     notifyListeners();
   }
 
-  /// Returns an ordered list of node ids forming a chain that includes [nodeId]:
-  /// walks backwards to the root, then forwards to the first leaf.
   List<String> chainForNode(String nodeId) {
     final path = <String>[nodeId];
     var cur = nodeId;
