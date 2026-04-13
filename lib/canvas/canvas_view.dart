@@ -471,14 +471,24 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
                   '${canvas.nodeIds.length} нод',
                   style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
-                trailing: isActive
-                    ? const Icon(Icons.check, size: 18)
-                    : null,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isActive)
+                      const Icon(Icons.check, size: 18),
+                    IconButton(
+                      icon: const Icon(Icons.more_horiz, size: 18),
+                      onPressed: () => _showOptions(canvas),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
                 onTap: () {
                   widget.model.switchCanvas(canvas.id);
                   Navigator.pop(context);
                 },
-                onLongPress: () => _showOptions(canvas),
               );
             },
           ),
@@ -491,7 +501,7 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
   void _showOptions(CanvasData canvas) {
     showModalBottomSheet(
       context: context,
-      builder: (_) => SafeArea(
+      builder: (innerCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -499,7 +509,7 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
               leading: const Icon(Icons.edit_outlined),
               title: const Text('Переименовать'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(innerCtx);
                 _rename(canvas);
               },
             ),
@@ -509,7 +519,7 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
                 title: const Text('Удалить',
                     style: TextStyle(color: Colors.red)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(innerCtx);
                   _delete(canvas);
                 },
               ),
