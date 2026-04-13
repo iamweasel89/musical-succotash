@@ -4,6 +4,14 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def localProps = new Properties()
+def localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+    localPropsFile.withReader("UTF-8") { localProps.load(it) }
+}
+def flutterVersionCode = localProps.getProperty("flutter.versionCode") ?: "1"
+def flutterVersionName = localProps.getProperty("flutter.versionName") ?: "1.0"
+
 android {
     namespace "com.example.hex_canvas_mobile"
     compileSdk 34
