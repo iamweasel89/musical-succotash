@@ -104,6 +104,97 @@ class _SettingsSheetState extends State<SettingsSheet> {
             const SizedBox(height: 12),
             // Update section
             const _UpdateSection(),
+            const Divider(height: 24),
+            // Default API node settings
+            const Text('Нода ЛЛМ (умолчания)',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'anthropic', label: Text('anthropic')),
+                ButtonSegment(value: 'openai', label: Text('openai')),
+                ButtonSegment(value: 'deepseek', label: Text('deepseek')),
+              ],
+              selected: {s.defaultProvider},
+              onSelectionChanged: (sel) => setState(() {
+                s.defaultProvider = sel.first;
+                s.defaultModel = sel.first == 'anthropic'
+                    ? 'claude-sonnet-4-5'
+                    : sel.first == 'openai'
+                        ? 'gpt-4o'
+                        : 'deepseek-chat';
+                _save();
+              }),
+            ),
+            const SizedBox(height: 8),
+            Text('Max tokens',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+                  .map((t) => ChoiceChip(
+                        label: Text('$t',
+                            style: const TextStyle(fontSize: 11)),
+                        selected: s.defaultMaxTokens == t,
+                        onSelected: (_) {
+                          setState(() => s.defaultMaxTokens = t);
+                          _save();
+                        },
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
+            Text('Temperature',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              children: [0.0, 0.3, 0.7, 1.0]
+                  .map((t) => ChoiceChip(
+                        label: Text(t.toString()),
+                        selected: s.defaultTemperature == t,
+                        onSelected: (_) {
+                          setState(() => s.defaultTemperature = t);
+                          _save();
+                        },
+                      ))
+                  .toList(),
+            ),
+            const Divider(height: 24),
+            // Compact chat
+            const Text('Компактный чат',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            _SwitchRow(
+              label: 'Сворачивать по умолчанию',
+              value: s.compactChat,
+              onChanged: (v) {
+                setState(() => s.compactChat = v);
+                _save();
+              },
+            ),
+            Row(
+              children: [
+                const Text('Строк видно:',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 12),
+                Wrap(
+                  spacing: 4,
+                  children: [3, 5, 10]
+                      .map((n) => ChoiceChip(
+                            label: Text('$n'),
+                            selected: s.compactLines == n,
+                            onSelected: (_) {
+                              setState(() => s.compactLines = n);
+                              _save();
+                            },
+                          ))
+                      .toList(),
+                ),
+              ],
+            ),
             if (widget.onClearAll != null) ...[
               const Divider(height: 24),
               SizedBox(

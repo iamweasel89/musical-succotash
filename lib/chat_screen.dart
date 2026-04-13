@@ -23,10 +23,39 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<String> _chainPath = [];
   bool _sending = false;
 
+  // Collapse state
+  // When _globalCollapse=true, _collapsedOverrides = explicitly expanded nodes.
+  // When _globalCollapse=false, _collapsedOverrides = explicitly collapsed nodes.
+  bool _globalCollapse = false;
+  final _collapsedOverrides = <String>{};
+
   @override
   void initState() {
     super.initState();
     _chainPath.addAll(widget.model.chainPath);
+    _globalCollapse = widget.model.settings.compactChat;
+  }
+
+  bool _isNodeCollapsed(String nodeId) {
+    if (_globalCollapse) return !_collapsedOverrides.contains(nodeId);
+    return _collapsedOverrides.contains(nodeId);
+  }
+
+  void _toggleNodeCollapse(String nodeId) {
+    setState(() {
+      if (_collapsedOverrides.contains(nodeId)) {
+        _collapsedOverrides.remove(nodeId);
+      } else {
+        _collapsedOverrides.add(nodeId);
+      }
+    });
+  }
+
+  void _toggleAll() {
+    setState(() {
+      _globalCollapse = !_globalCollapse;
+      _collapsedOverrides.clear();
+    });
   }
 
   void _saveChain() {
@@ -129,7 +158,12 @@ class _ChatScreenState extends State<ChatScreen> {
       position: finalApiPos,
       growthDir: textSlot.dir,
     );
-    nodeApiSettings[apiNode.id] = ApiNodeSettings();
+    nodeApiSettings[apiNode.id] = ApiNodeSettings(
+      provider: widget.model.settings.defaultProvider,
+      model: widget.model.settings.defaultModel,
+      maxTokens: widget.model.settings.defaultMaxTokens,
+      temperature: widget.model.settings.defaultTemperature,
+    );
 
     widget.model.addNode(textNode);
     widget.model.addNode(apiNode);
@@ -243,7 +277,12 @@ class _ChatScreenState extends State<ChatScreen> {
       position: slot.pos,
       growthDir: slot.dir,
     );
-    nodeApiSettings[apiNode.id] = ApiNodeSettings();
+    nodeApiSettings[apiNode.id] = ApiNodeSettings(
+      provider: widget.model.settings.defaultProvider,
+      model: widget.model.settings.defaultModel,
+      maxTokens: widget.model.settings.defaultMaxTokens,
+      temperature: widget.model.settings.defaultTemperature,
+    );
 
     widget.model.addNode(apiNode);
     widget.model.addEdge(Edge(fromId: textNode.id, toId: apiNode.id));
@@ -386,7 +425,31 @@ class _ChatScreenState extends State<ChatScreen> {
               builder: (context, _) => _buildList(),
             ),
           ),
+          if (_chainPath.isNotEmpty) _buildChatToolbar(),
           _buildInputBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatToolbar() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          IconButton(
+            icon: Icon(
+              _globalCollapse ? Icons.unfold_more : Icons.unfold_less,
+              size: 18,
+            ),
+            tooltip: _globalCollapse ? 'Развернуть все' : 'Свернуть все',
+            onPressed: _toggleAll,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(),
+            visualDensity: VisualDensity.compact,
+            color: Colors.grey[600],
+          ),
         ],
       ),
     );
@@ -414,6 +477,9 @@ class _ChatScreenState extends State<ChatScreen> {
           node: node,
           siblingCount: siblings.length,
           siblingIndex: siblingIndex < 0 ? 0 : siblingIndex,
+          isCollapsed: _isNodeCollapsed(node.id),
+          maxLines: widget.model.settings.compactLines,
+          onDoubleTap: () => _toggleNodeCollapse(node.id),
           onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
           onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
           onCopy: () => _copyNode(node),
@@ -476,6 +542,9 @@ class _ChatBubble extends StatelessWidget {
   final Node node;
   final int siblingCount;
   final int siblingIndex;
+  final bool isCollapsed;
+  final int maxLines;
+  final VoidCallback? onDoubleTap;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
   final VoidCallback onCopy;
@@ -489,6 +558,9 @@ class _ChatBubble extends StatelessWidget {
     required this.node,
     this.siblingCount = 1,
     this.siblingIndex = 0,
+    this.isCollapsed = false,
+    this.maxLines = 5,
+    this.onDoubleTap,
     this.onSwipeLeft,
     this.onSwipeRight,
     required this.onCopy,
@@ -514,18 +586,31 @@ class _ChatBubble extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           );
         case NodeStatus.error:
-          content =
-              Text(node.text, style: const TextStyle(color: Colors.red));
+          content = Text(
+            node.text,
+            style: const TextStyle(color: Colors.red),
+            maxLines: isCollapsed ? maxLines : null,
+            overflow: isCollapsed ? TextOverflow.ellipsis : null,
+          );
         default:
-          content = Text(node.text);
+          content = Text(
+            node.text,
+            maxLines: isCollapsed ? maxLines : null,
+            overflow: isCollapsed ? TextOverflow.ellipsis : null,
+          );
       }
     } else {
-      content = Text(node.text);
+      content = Text(
+        node.text,
+        maxLines: isCollapsed ? maxLines : null,
+        overflow: isCollapsed ? TextOverflow.ellipsis : null,
+      );
     }
 
     return Align(
       alignment: isUser ? Alignment.centerLeft : Alignment.centerRight,
       child: GestureDetector(
+        onDoubleTap: onDoubleTap,
         onHorizontalDragEnd: (d) {
           final v = d.primaryVelocity ?? 0;
           if (v < -200) onSwipeLeft?.call();

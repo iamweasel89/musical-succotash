@@ -46,6 +46,12 @@ class AppModel extends ChangeNotifier {
         settings.defaultSystemPrompt = s.defaultSystemPrompt;
         settings.streamingMode = s.streamingMode;
         settings.showNodeLabels = s.showNodeLabels;
+        settings.defaultProvider = s.defaultProvider;
+        settings.defaultModel = s.defaultModel;
+        settings.defaultMaxTokens = s.defaultMaxTokens;
+        settings.defaultTemperature = s.defaultTemperature;
+        settings.compactChat = s.compactChat;
+        settings.compactLines = s.compactLines;
       }
     } catch (_) {}
   }
