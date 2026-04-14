@@ -294,9 +294,9 @@ class AppUpdater {
     }
     try {
       _log('install: calling native installApk id=$_downloadId');
-      await _channel
-          .invokeMethod<void>('installApk', {'id': _downloadId});
-      _log('install: native returned success — installer launched');
+      final uri = await _channel
+          .invokeMethod<String>('installApk', {'id': _downloadId});
+      _log('install: native returned success uri=$uri — installer launched');
       message = 'Установщик запущен — следуйте его инструкциям';
     } on PlatformException catch (e) {
       _log('install: PlatformException code=${e.code} message=${e.message}');

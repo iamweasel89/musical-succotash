@@ -152,12 +152,6 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "installApk" -> {
-                        // Build a content://downloads/my_downloads/<id> URI from the
-                        // download ID.  This is the system Downloads provider URI that
-                        // PackageManagerService can read without any extra grants.
-                        // COLUMN_LOCAL_URI may return file:// on some devices which
-                        // Android 7+ rejects ("exposed beyond app"); the content:// URI
-                        // constructed from the ID never has that problem.
                         val id = (call.argument<Any>("id") as? Number)?.toLong()
                         if (id == null) {
                             result.error("INVALID_ARG", "id is null", null)
@@ -178,9 +172,20 @@ class MainActivity : FlutterActivity() {
                                 )
                                 return@setMethodCallHandler
                             }
-                            val contentUri = ContentUris.withAppendedId(
-                                Uri.parse("content://downloads/my_downloads"), id
-                            )
+                            val dm =
+                                getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            // getUriForDownloadedFile returns the correct content:// URI
+                            // for the download — public_downloads for files in public
+                            // storage, which PackageInstaller can read without grants.
+                            val contentUri = dm.getUriForDownloadedFile(id)
+                            if (contentUri == null) {
+                                result.error(
+                                    "NO_URI",
+                                    "getUriForDownloadedFile returned null for id=$id",
+                                    null
+                                )
+                                return@setMethodCallHandler
+                            }
                             startActivity(
                                 Intent(Intent.ACTION_VIEW).apply {
                                     setDataAndType(
@@ -191,7 +196,8 @@ class MainActivity : FlutterActivity() {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 }
                             )
-                            result.success(null)
+                            // Return the URI string so Dart can log it
+                            result.success(contentUri.toString())
                         } catch (e: Exception) {
                             result.error("INSTALL_ERROR", e.message, null)
                         }
