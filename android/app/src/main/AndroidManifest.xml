@@ -27,6 +27,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <receiver
+            android:name=".InstallStatusReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.hex_canvas_mobile.INSTALL_STATUS" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.example.hex_canvas_mobile.fileProvider"

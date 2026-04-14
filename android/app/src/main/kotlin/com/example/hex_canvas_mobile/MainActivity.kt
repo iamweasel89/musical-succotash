@@ -1,9 +1,11 @@
 package com.example.hex_canvas_mobile
 
 import android.app.DownloadManager
-import android.content.ContentUris
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -15,6 +17,23 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 private const val APK_FILENAME = "hex_canvas_update.apk"
+private const val ACTION_INSTALL_STATUS = "com.example.hex_canvas_mobile.INSTALL_STATUS"
+
+// Receives the PackageInstaller broadcast and starts the confirmation activity.
+// STATUS_PENDING_USER_ACTION carries the real "Do you want to install?" intent
+// that we must start to make the dialog appear.
+class InstallStatusReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != ACTION_INSTALL_STATUS) return
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)
+        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            @Suppress("DEPRECATION")
+            val confirmIntent =
+                intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
+            context.startActivity(confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+}
 
 class MainActivity : FlutterActivity() {
 
@@ -40,8 +59,6 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
                         try {
-                            // Delete any leftover APK so DownloadManager doesn't create
-                            // a renamed file (hex_canvas_update-1.apk etc.)
                             apkFile().delete()
                             val dm =
                                 getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -91,19 +108,12 @@ class MainActivity : FlutterActivity() {
                                 DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR
                             )
                         )
-                        // The system-managed content URI (content://downloads/my_downloads/ID)
-                        // is served by the system Downloads provider and is accessible to
-                        // PackageManagerService without any FileProvider grants.
-                        val localUri = cursor.getString(
-                            cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
-                        ) ?: ""
                         cursor.close()
                         result.success(
                             mapOf(
                                 "status" to status,
                                 "total" to total,
                                 "downloaded" to downloaded,
-                                "systemUri" to localUri
                             )
                         )
                     }
@@ -157,50 +167,59 @@ class MainActivity : FlutterActivity() {
                             result.error("INVALID_ARG", "id is null", null)
                             return@setMethodCallHandler
                         }
-                        try {
-                            if (!canInstallPackages()) {
-                                startActivity(
-                                    Intent(
-                                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                        Uri.parse("package:$packageName")
-                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                                result.error(
-                                    "NEED_PERMISSION",
-                                    "Разрешите установку из неизвестных источников для Hex Canvas в открывшихся настройках, затем нажмите Install снова.",
-                                    null
-                                )
-                                return@setMethodCallHandler
-                            }
-                            val dm =
-                                getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            // getUriForDownloadedFile returns the correct content:// URI
-                            // for the download — public_downloads for files in public
-                            // storage, which PackageInstaller can read without grants.
-                            val contentUri = dm.getUriForDownloadedFile(id)
-                            if (contentUri == null) {
-                                result.error(
-                                    "NO_URI",
-                                    "getUriForDownloadedFile returned null for id=$id",
-                                    null
-                                )
-                                return@setMethodCallHandler
-                            }
+                        if (!canInstallPackages()) {
                             startActivity(
-                                Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(
-                                        contentUri,
-                                        "application/vnd.android.package-archive"
-                                    )
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
+                                Intent(
+                                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    Uri.parse("package:$packageName")
+                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             )
-                            // Return the URI string so Dart can log it
-                            result.success(contentUri.toString())
-                        } catch (e: Exception) {
-                            result.error("INSTALL_ERROR", e.message, null)
+                            result.error(
+                                "NEED_PERMISSION",
+                                "Разрешите установку из неизвестных источников для Hex Canvas в открывшихся настройках, затем нажмите Install снова.",
+                                null
+                            )
+                            return@setMethodCallHandler
                         }
+                        val apk = apkFile()
+                        if (!apk.exists()) {
+                            result.error("NO_FILE", "APK not found: ${apk.absolutePath}", null)
+                            return@setMethodCallHandler
+                        }
+                        // Use PackageInstaller session API: we read the APK ourselves and
+                        // write it to the session, so PackageManagerService never needs a
+                        // URI grant — this avoids the "exposed beyond app" / parse failure
+                        // that affects content:// URI approaches.
+                        // The broadcast STATUS_PENDING_USER_ACTION delivers the real
+                        // confirmation-dialog intent which InstallStatusReceiver must start.
+                        Thread {
+                            try {
+                                val pi = packageManager.packageInstaller
+                                val params = PackageInstaller.SessionParams(
+                                    PackageInstaller.SessionParams.MODE_FULL_INSTALL
+                                )
+                                val sessionId = pi.createSession(params)
+                                pi.openSession(sessionId).use { session ->
+                                    session.openWrite("base.apk", 0, apk.length()).use { out ->
+                                        apk.inputStream().use { it.copyTo(out) }
+                                        session.fsync(out)
+                                    }
+                                    val broadcastIntent =
+                                        Intent(ACTION_INSTALL_STATUS).setPackage(packageName)
+                                    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                                            PendingIntent.FLAG_MUTABLE
+                                        else 0
+                                    val pending = PendingIntent.getBroadcast(
+                                        applicationContext, sessionId, broadcastIntent, flags
+                                    )
+                                    session.commit(pending.intentSender)
+                                }
+                                result.success("session:$sessionId")
+                            } catch (e: Exception) {
+                                result.error("INSTALL_ERROR", e.message, null)
+                            }
+                        }.start()
                     }
 
                     else -> result.notImplemented()
