@@ -124,9 +124,12 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     if (anchor == null) return {};
 
     final delta = global - _panStart;
-    // Hysteresis: enter pivot at dy>=20, exit only at dy<15 to prevent oscillation
+    // Hysteresis: enter pivot when dy>=20, dx>=8, AND dy>=30% of dx (prevents
+    // accidental pivot on primarily-horizontal swipes with slight vertical drift).
+    // Exit pivot only at dy<15 to prevent oscillation around the entry threshold.
     final absDy = delta.dy.abs();
-    if (absDy >= 20 && delta.dx.abs() >= _kThreshold) {
+    final absDx = delta.dx.abs();
+    if (absDy >= 20 && absDx >= _kThreshold && absDy >= absDx * 0.3) {
       _inPivot = true;
     } else if (absDy < 15) {
       _inPivot = false;
