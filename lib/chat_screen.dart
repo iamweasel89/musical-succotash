@@ -129,8 +129,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ── Placement helpers ─────────────────────────────────────────────────────
 
-  Set<HexPos> get _occupied =>
-      widget.model.nodes.map((n) => n.position).toSet();
+  Set<HexPos> get _occupied {
+    final activeIds = widget.model.activeCanvas.nodeIds.toSet();
+    return widget.model.nodes
+        .where((n) => activeIds.contains(n.id))
+        .map((n) => n.position)
+        .toSet();
+  }
 
   BranchSlot _continuationSlot(Node lastNode) {
     final pos = chainNextPos(lastNode.position, lastNode.growthDir);
