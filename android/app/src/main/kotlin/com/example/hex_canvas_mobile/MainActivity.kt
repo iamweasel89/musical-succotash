@@ -115,12 +115,44 @@ class MainActivity : FlutterActivity() {
                     "checkInstallReady" -> {
                         val apk = apkFile()
                         val apkSize = if (apk?.exists() == true) apk.length() else -1L
+
+                        // Parse the downloaded APK to get its real versionCode and
+                        // packageName — lets us verify the APK is the right app and
+                        // has a higher versionCode than what is installed.
+                        var apkVersionCode = -1L
+                        var apkPackageName = ""
+                        var installedVersionCode = -1L
+                        if (apk?.exists() == true) {
+                            try {
+                                val pi = packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
+                                if (pi != null) {
+                                    apkPackageName = pi.packageName ?: ""
+                                    apkVersionCode =
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                                            pi.longVersionCode
+                                        else
+                                            @Suppress("DEPRECATION") pi.versionCode.toLong()
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        try {
+                            val pi = packageManager.getPackageInfo(packageName, 0)
+                            installedVersionCode =
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                                    pi.longVersionCode
+                                else
+                                    @Suppress("DEPRECATION") pi.versionCode.toLong()
+                        } catch (_: Exception) {}
+
                         result.success(
                             mapOf(
                                 "hasPermission" to canInstallPackages(),
                                 "apkExists" to (apk?.exists() ?: false),
                                 "apkPath" to (apk?.absolutePath ?: ""),
-                                "apkSize" to apkSize
+                                "apkSize" to apkSize,
+                                "apkVersionCode" to apkVersionCode,
+                                "apkPackageName" to apkPackageName,
+                                "installedVersionCode" to installedVersionCode
                             )
                         )
                     }

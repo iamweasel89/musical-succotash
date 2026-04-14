@@ -103,10 +103,16 @@ class AppUpdater {
         apkPath: raw['apkPath'] as String? ?? '',
         apkSize: (raw['apkSize'] as num?)?.toInt() ?? -1,
       );
+      final apkVc = (raw['apkVersionCode'] as num?)?.toInt() ?? -1;
+      final instVc = (raw['installedVersionCode'] as num?)?.toInt() ?? -1;
+      final apkPkg = raw['apkPackageName'] as String? ?? '';
       _log('checkInstallReady: hasPermission=${installReadiness!.hasPermission}'
           ' apkExists=${installReadiness!.apkExists}'
-          ' size=${installReadiness!.apkSize}B'
-          ' path=${installReadiness!.apkPath}');
+          ' size=${installReadiness!.apkSize}B');
+      _log('checkInstallReady: apk.pkg=$apkPkg'
+          ' apk.versionCode=$apkVc'
+          ' installed.versionCode=$instVc'
+          ' canUpdate=${apkVc > instVc}');
     } catch (e) {
       _log('checkInstallReady: error — $e');
     }
