@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -191,14 +192,30 @@ class _ChatScreenState extends State<ChatScreen> {
     if (result == null) return;
     final added = <Attachment>[];
     for (final file in result.files) {
-      if (file.bytes == null) continue;
+      // On Android the gallery picker may return a content URI where bytes
+      // are not loaded inline; fall back to reading from the temp path.
+      var bytes = file.bytes;
+      if (bytes == null && file.path != null) {
+        try {
+          bytes = await File(file.path!).readAsBytes();
+        } catch (_) {}
+      }
+      if (bytes == null) continue;
       added.add(Attachment(
         filename: file.name,
         mimeType: _imageMime(file.extension ?? ''),
-        base64Data: base64Encode(file.bytes!),
+        base64Data: base64Encode(bytes),
       ));
     }
-    if (added.isEmpty) return;
+    if (added.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Не удалось прочитать изображение'),
+          duration: Duration(seconds: 2),
+        ));
+      }
+      return;
+    }
     setState(() => _pendingAttachments.addAll(added));
   }
 
@@ -255,8 +272,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send() async {
     final raw = _inputCtrl.text.trim();
-    if (raw.isEmpty || _sending) return;
-    final text = raw[0].toUpperCase() + raw.substring(1);
+    if ((raw.isEmpty && _pendingAttachments.isEmpty) || _sending) return;
+    final text = raw.isEmpty
+        ? ''
+        : raw[0].toUpperCase() + raw.substring(1);
     _inputCtrl.clear();
     setState(() => _sending = true);
     widget.model.snapshot('Отправить сообщение');
