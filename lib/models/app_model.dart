@@ -15,12 +15,15 @@ class HistoryEntry {
   final String nodesJson;
   final String edgesJson;
   final String chainJson;
+  /// Snapshot of canvas nodeIds: [{id, nodeIds:[...]}]
+  final String canvasNodeIdsJson;
 
   const HistoryEntry({
     required this.description,
     required this.nodesJson,
     required this.edgesJson,
     required this.chainJson,
+    this.canvasNodeIdsJson = '[]',
   });
 
   Map<String, dynamic> toJson() => {
@@ -28,6 +31,7 @@ class HistoryEntry {
         'n': nodesJson,
         'e': edgesJson,
         'c': chainJson,
+        'cv': canvasNodeIdsJson,
       };
 
   factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
@@ -35,6 +39,7 @@ class HistoryEntry {
         nodesJson: j['n'] as String? ?? '[]',
         edgesJson: j['e'] as String? ?? '[]',
         chainJson: j['c'] as String? ?? '[]',
+        canvasNodeIdsJson: j['cv'] as String? ?? '[]',
       );
 }
 
@@ -240,6 +245,9 @@ class AppModel extends ChangeNotifier {
         nodesJson: jsonEncode(nodes.map((n) => n.toJson()).toList()),
         edgesJson: jsonEncode(edges.map((e) => e.toJson()).toList()),
         chainJson: jsonEncode(chainPath),
+        canvasNodeIdsJson: jsonEncode(
+          canvases.map((c) => {'id': c.id, 'nodeIds': c.nodeIds}).toList(),
+        ),
       );
 
   void _applyEntry(HistoryEntry entry) {
@@ -254,6 +262,17 @@ class AppModel extends ChangeNotifier {
     chainPath
       ..clear()
       ..addAll((jsonDecode(entry.chainJson) as List).cast<String>());
+    // Restore canvas nodeIds from snapshot (keeps pan/zoom/name intact)
+    final cvList = jsonDecode(entry.canvasNodeIdsJson) as List;
+    for (final item in cvList) {
+      final id = item['id'] as String;
+      final idx = canvases.indexWhere((c) => c.id == id);
+      if (idx >= 0) {
+        canvases[idx].nodeIds
+          ..clear()
+          ..addAll((item['nodeIds'] as List).cast<String>());
+      }
+    }
     save();
     _saveHistory();
     notifyListeners();

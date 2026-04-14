@@ -479,7 +479,7 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
                   ),
                 ),
                 subtitle: Text(
-                  '${canvas.nodeIds.length} нод',
+                  '${canvas.nodeIds.where((id) => widget.model.nodes.any((n) => n.id == id)).length} нод',
                   style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
                 trailing: Row(

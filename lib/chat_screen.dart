@@ -1,9 +1,13 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'models/app_model.dart';
+import 'models/attachment.dart';
 import 'models/edge.dart';
 import 'models/hex_layout.dart';
 import 'models/hex_pos.dart';
@@ -37,6 +41,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<String> _chainPath = [];
   bool _sending = false;
   CancelToken? _runToken;
+  final List<Attachment> _pendingAttachments = [];
 
   // Collapse state
   // When _globalCollapse=true, _collapsedOverrides = explicitly expanded nodes.
@@ -147,6 +152,44 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // ── Attachments ───────────────────────────────────────────────────────────
+
+  Future<void> _pickAttachments() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
+      withData: true,
+    );
+    if (result == null) return;
+    final added = <Attachment>[];
+    for (final file in result.files) {
+      if (file.bytes == null) continue;
+      added.add(Attachment(
+        filename: file.name,
+        mimeType: _mimeFromExt(file.extension ?? ''),
+        base64Data: base64Encode(file.bytes!),
+      ));
+    }
+    if (added.isEmpty) return;
+    setState(() => _pendingAttachments.addAll(added));
+  }
+
+  String _mimeFromExt(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'image/jpeg';
+    }
+  }
+
   // ── Send ──────────────────────────────────────────────────────────────────
 
   Future<void> _send() async {
@@ -184,6 +227,7 @@ class _ChatScreenState extends State<ChatScreen> {
       position: textSlot.pos,
       text: text,
       growthDir: textSlot.dir,
+      attachments: List.from(_pendingAttachments),
     );
     final apiNode = Node(
       type: NodeType.api,
@@ -208,6 +252,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _chainPath..add(textNode.id)..add(apiNode.id);
       _sending = false;
+      _pendingAttachments.clear();
     });
     _saveChain();
     _scrollToBottom();
@@ -593,35 +638,74 @@ class _ChatScreenState extends State<ChatScreen> {
         color: Colors.white,
         boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _inputCtrl,
-              maxLines: null,
-              decoration: const InputDecoration(
-                hintText: 'Сообщение…',
-                border: OutlineInputBorder(),
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          if (_pendingAttachments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: _pendingAttachments.map((a) => Chip(
+                  avatar: const Icon(Icons.image_outlined, size: 14),
+                  label: Text(
+                    a.filename,
+                    style: const TextStyle(fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onDeleted: running
+                      ? null
+                      : () => setState(() => _pendingAttachments.remove(a)),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: EdgeInsets.zero,
+                )).toList(),
               ),
-              onSubmitted: running ? null : (_) => _send(),
             ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.attach_file, size: 20),
+                tooltip: 'Прикрепить изображение',
+                onPressed: running ? null : _pickAttachments,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                visualDensity: VisualDensity.compact,
+                color: _pendingAttachments.isNotEmpty
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.grey[600],
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _inputCtrl,
+                  maxLines: null,
+                  decoration: const InputDecoration(
+                    hintText: 'Сообщение…',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onSubmitted: running ? null : (_) => _send(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (running)
+                IconButton(
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  color: Colors.red[400],
+                  tooltip: 'Остановить',
+                  onPressed: _stopGeneration,
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.send),
+                  onPressed: _sending ? null : _send,
+                ),
+            ],
           ),
-          const SizedBox(width: 8),
-          if (running)
-            IconButton(
-              icon: const Icon(Icons.stop_circle_outlined),
-              color: Colors.red[400],
-              tooltip: 'Остановить',
-              onPressed: _stopGeneration,
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.send),
-              onPressed: _sending ? null : _send,
-            ),
         ],
       ),
     );
