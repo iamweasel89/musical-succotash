@@ -156,39 +156,44 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     final anchorLineIdx = anchor.lineIdx;
 
     if (_hDir == 'right') {
-      // Anchor line: anchor word → end
+      if (curLineIdx == anchorLineIdx) {
+        // Still within anchor paragraph — select up to touch word (not whole paragraph).
+        // Our _Line is a paragraph; forcing end-of-line here would snap to paragraph end.
+        return _wordsOnAnchorLine(anchor, global, clamped: false);
+      }
+      // Crossed into a different paragraph: full paragraph-spanning mode.
+      // Anchor paragraph: anchor word → end
       _addRange(_lines[anchorLineIdx].words, anchor.wordIdx,
           _lines[anchorLineIdx].words.length - 1, result);
-      // Intermediate lines: full
+      // Intermediate paragraphs: full
       for (int li = anchorLineIdx + 1; li < curLineIdx; li++) {
         for (final w in _lines[li].words) result.add(w.id);
       }
-      // Current line: start → touch word
-      if (curLineIdx > anchorLineIdx) {
-        final curLine = _lines[curLineIdx];
-        final touchWord = _wordAt(global);
-        final endIdx = (touchWord?.lineIdx == curLineIdx)
-            ? touchWord!.wordIdx
-            : curLine.words.length - 1;
-        _addRange(curLine.words, 0, endIdx, result);
-      }
+      // Current paragraph: start → touch word
+      final curLine = _lines[curLineIdx];
+      final touchWord = _wordAt(global);
+      final endIdx = (touchWord?.lineIdx == curLineIdx)
+          ? touchWord!.wordIdx
+          : curLine.words.length - 1;
+      _addRange(curLine.words, 0, endIdx, result);
     } else {
       // Left + up
-      // Anchor line: start → anchor word
+      if (curLineIdx == anchorLineIdx) {
+        return _wordsOnAnchorLine(anchor, global, clamped: false);
+      }
+      // Anchor paragraph: start → anchor word
       _addRange(_lines[anchorLineIdx].words, 0, anchor.wordIdx, result);
-      // Intermediate lines: full
+      // Intermediate paragraphs: full
       for (int li = curLineIdx + 1; li < anchorLineIdx; li++) {
         for (final w in _lines[li].words) result.add(w.id);
       }
-      // Current (topmost) line: touch word → end
-      if (curLineIdx < anchorLineIdx) {
-        final curLine = _lines[curLineIdx];
-        final touchWord = _wordAt(global);
-        final startIdx = (touchWord?.lineIdx == curLineIdx)
-            ? touchWord!.wordIdx
-            : 0;
-        _addRange(curLine.words, startIdx, curLine.words.length - 1, result);
-      }
+      // Current (topmost) paragraph: touch word → end
+      final curLine = _lines[curLineIdx];
+      final touchWord = _wordAt(global);
+      final startIdx = (touchWord?.lineIdx == curLineIdx)
+          ? touchWord!.wordIdx
+          : 0;
+      _addRange(curLine.words, startIdx, curLine.words.length - 1, result);
     }
 
     return result;
