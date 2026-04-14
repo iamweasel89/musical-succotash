@@ -146,6 +146,17 @@ class AppUpdater {
       state = UpdState.idle;
       downloadedFile = null;
       _downloadId = null;
+    } on PlatformException catch (e) {
+      if (e.code == 'NEED_PERMISSION') {
+        // The Settings page was opened so the user can grant permission.
+        // Keep state = ready so the Install button stays visible for retry.
+        message = e.message ??
+            'Enable "Install unknown apps" for Hex Canvas in Settings, then tap Install again.';
+        // state stays UpdState.ready
+      } else {
+        state = UpdState.error;
+        message = e.message ?? e.toString();
+      }
     } catch (e) {
       state = UpdState.error;
       message = e.toString();

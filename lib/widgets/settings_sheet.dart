@@ -622,17 +622,29 @@ class _UpdateSectionState extends State<_UpdateSection> {
         );
 
       case UpdState.ready:
-        return Row(children: [
-          const Icon(Icons.download_done, color: Colors.green, size: 18),
-          const SizedBox(width: 6),
-          const Expanded(
-            child: Text('Downloaded', style: TextStyle(fontSize: 13)),
-          ),
-          FilledButton(
-            onPressed: AppUpdater.install,
-            child: const Text('Install'),
-          ),
-        ]);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.download_done, color: Colors.green, size: 18),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text('Downloaded', style: TextStyle(fontSize: 13)),
+              ),
+              FilledButton(
+                onPressed: AppUpdater.install,
+                child: const Text('Install'),
+              ),
+            ]),
+            if (AppUpdater.message.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                AppUpdater.message,
+                style: TextStyle(fontSize: 11, color: Colors.orange[800]),
+              ),
+            ],
+          ],
+        );
 
       case UpdState.error:
         return Row(children: [
