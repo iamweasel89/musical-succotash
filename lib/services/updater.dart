@@ -72,6 +72,16 @@ class AppUpdater {
 
   /// Fetches install-readiness info from native and updates [installReadiness].
   /// Call when transitioning to UpdState.ready so the UI can show warnings.
+  /// Call after the user confirms the installation finished (or cancelled).
+  static void dismissInstaller() {
+    state = UpdState.idle;
+    message = '';
+    downloadedFile = null;
+    _downloadId = null;
+    installReadiness = null;
+    _notify();
+  }
+
   static Future<void> checkInstallReady() async {
     try {
       final raw = await _channel.invokeMethod<Map>('checkInstallReady');
@@ -170,18 +180,20 @@ class AppUpdater {
     try {
       await _channel
           .invokeMethod<void>('installApk', {'path': downloadedFile!.path});
-      // Remember what we installed so check() doesn't offer it again
-      // before the app fully restarts with the new build number.
+      // Installer activity was launched successfully.
+      // Do NOT flip to idle here — that would cause the settings sheet to
+      // rebuild and the bottom sheet animation would cover the installer
+      // dialog that just appeared on top. Keep state=ready so the sheet
+      // stays as-is; the app will restart naturally if the user completes
+      // the installation, resetting all static state.
       _installedBuild = updateInfo?.latestBuild ?? _installedBuild;
-      state = UpdState.idle;
-      downloadedFile = null;
-      _downloadId = null;
+      message = 'Установщик запущен — следуйте его инструкциям';
     } on PlatformException catch (e) {
       if (e.code == 'NEED_PERMISSION') {
         // The Settings page was opened so the user can grant permission.
         // Keep state = ready so the Install button stays visible for retry.
         message = e.message ??
-            'Enable "Install unknown apps" for Hex Canvas in Settings, then tap Install again.';
+            'Разрешите установку из неизвестных источников, затем нажмите Install снова.';
         // state stays UpdState.ready
       } else {
         state = UpdState.error;

@@ -623,13 +623,40 @@ class _UpdateSectionState extends State<_UpdateSection> {
 
       case UpdState.ready:
         final readiness = AppUpdater.installReadiness;
-        final warn = readiness != null && !readiness.ok
-            ? (!readiness.hasPermission
-                ? 'Нет разрешения "Установка из неизвестных источников". Нажмите Install — откроются настройки, выдайте разрешение, затем нажмите ещё раз.'
-                : 'Файл обновления не найден. Попробуйте скачать снова.')
-            : AppUpdater.message.isNotEmpty
-                ? AppUpdater.message
+        final installerLaunched = AppUpdater.message.startsWith('Установщик');
+        final warn = installerLaunched
+            ? null
+            : readiness != null && !readiness.ok
+                ? (!readiness.hasPermission
+                    ? 'Нет разрешения "Установка из неизвестных источников". Нажмите Install — откроются настройки, выдайте разрешение, затем нажмите ещё раз.'
+                    : 'Файл обновления не найден. Попробуйте скачать снова.')
                 : null;
+        if (installerLaunched) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.system_update_outlined,
+                    color: Colors.blue, size: 18),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text('Установщик запущен',
+                      style: TextStyle(fontSize: 13)),
+                ),
+                TextButton(
+                  onPressed: AppUpdater.dismissInstaller,
+                  child:
+                      const Text('Готово', style: TextStyle(fontSize: 12)),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                'Следуйте инструкциям установщика. Если диалог не виден — сверните это окно.',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ],
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
