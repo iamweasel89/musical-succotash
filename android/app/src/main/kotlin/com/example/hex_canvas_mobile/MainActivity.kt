@@ -154,17 +154,17 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
 
-                        // Use PackageInstaller API: stream APK bytes directly into a system
-                        // session so the installer never needs to access a FileProvider URI
-                        // (content:// URI grants don't reach the system installer process on
-                        // many Android versions, causing silent failure after user confirms).
+                        // Write APK into a PackageInstaller session in a background
+                        // thread (23 MB file I/O), then commit on the UI thread so
+                        // Android can show the confirmation dialog.
                         Thread {
+                            var sessionId = -1
                             try {
                                 val installer = packageManager.packageInstaller
                                 val params = PackageInstaller.SessionParams(
                                     PackageInstaller.SessionParams.MODE_FULL_INSTALL
                                 )
-                                val sessionId = installer.createSession(params)
+                                sessionId = installer.createSession(params)
                                 installer.openSession(sessionId).use { session ->
                                     apk.inputStream().use { input ->
                                         session.openWrite("update", 0L, apk.length())
@@ -173,22 +173,39 @@ class MainActivity : FlutterActivity() {
                                                 session.fsync(output)
                                             }
                                     }
-                                    val piFlags =
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                                            PendingIntent.FLAG_UPDATE_CURRENT or
-                                                    PendingIntent.FLAG_MUTABLE
-                                        else PendingIntent.FLAG_UPDATE_CURRENT
-                                    val pi = PendingIntent.getActivity(
-                                        applicationContext, sessionId,
-                                        Intent(applicationContext, MainActivity::class.java)
-                                            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                                        piFlags
-                                    )
-                                    session.commit(pi.intentSender)
                                 }
-                                result.success(null)
+                                // session.commit() must run on the main thread —
+                                // calling it from a background thread prevents the
+                                // PackageInstaller confirmation dialog from appearing.
+                                val sid = sessionId
+                                runOnUiThread {
+                                    try {
+                                        val piFlags =
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                                                PendingIntent.FLAG_UPDATE_CURRENT or
+                                                        PendingIntent.FLAG_MUTABLE
+                                            else PendingIntent.FLAG_UPDATE_CURRENT
+                                        val pi = PendingIntent.getActivity(
+                                            this@MainActivity, sid,
+                                            Intent(this@MainActivity, MainActivity::class.java)
+                                                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                                            piFlags
+                                        )
+                                        installer.openSession(sid).use { s ->
+                                            s.commit(pi.intentSender)
+                                        }
+                                        result.success(null)
+                                    } catch (e: Exception) {
+                                        installer.abandonSession(sid)
+                                        result.error("INSTALL_ERROR", e.message, null)
+                                    }
+                                }
                             } catch (e: Exception) {
-                                result.error("INSTALL_ERROR", e.message, null)
+                                if (sessionId != -1)
+                                    packageManager.packageInstaller.abandonSession(sessionId)
+                                runOnUiThread {
+                                    result.error("INSTALL_ERROR", e.message, null)
+                                }
                             }
                         }.start()
                     }

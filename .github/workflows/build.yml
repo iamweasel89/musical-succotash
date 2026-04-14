@@ -46,6 +46,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub release
+        if: github.ref == 'refs/heads/claude/hex-canvas-mobile-08MeM'
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk hex-canvas.apk
           gh release create "build-${{ github.run_number }}" \
