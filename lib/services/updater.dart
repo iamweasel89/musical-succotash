@@ -125,13 +125,23 @@ class AppUpdater {
       _log('check: currentBuild=$currentBuild packageBuild=$packageBuild');
 
       final resp = await http
-          .get(Uri.parse(_apiUrl), headers: {'Accept': 'application/json'})
+          .get(Uri.parse(_apiUrl), headers: {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          })
           .timeout(const Duration(seconds: 10));
       _log('check: GitHub API status=${resp.statusCode}');
 
       if (resp.statusCode == 404) {
         state = UpdState.upToDate;
         message = 'Build $currentBuild — no releases yet';
+        _notify();
+        return;
+      }
+      if (resp.statusCode == 403 || resp.statusCode == 429) {
+        state = UpdState.error;
+        message = 'GitHub API rate limit — подождите минуту и повторите';
+        _log('check: rate limited (${resp.statusCode})');
         _notify();
         return;
       }
