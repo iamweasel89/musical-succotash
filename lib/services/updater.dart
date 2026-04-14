@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 // ── Update state ───────────────────────────────────────────────────────────
 enum UpdState { idle, checking, upToDate, available, downloading, ready, error }
@@ -33,10 +34,6 @@ class UpdateInfo {
   });
 }
 
-// DownloadManager status codes (mirrors Android constants)
-const _dmSuccessful = 8;
-const _dmFailed = 16;
-
 // ── Updater singleton ──────────────────────────────────────────────────────
 class AppUpdater {
   static const _apiUrl =
@@ -50,8 +47,6 @@ class AppUpdater {
   static UpdateInfo? updateInfo;
   static File? downloadedFile;
   static InstallReadiness? installReadiness;
-  static int? _downloadId;
-  static bool _polling = false;
   static int _installedBuild = 0;
 
   // ── In-app log ────────────────────────────────────────────────────────────
@@ -59,7 +54,7 @@ class AppUpdater {
   static bool showLog = false;
 
   static void _log(String msg) {
-    final ts = DateTime.now().toIso8601String().substring(11, 23); // HH:mm:ss.ms
+    final ts = DateTime.now().toIso8601String().substring(11, 23);
     log.add('[$ts] $msg');
     if (log.length > 200) log.removeAt(0);
     _notify();
@@ -78,17 +73,10 @@ class AppUpdater {
     for (final fn in List.of(_listeners)) fn();
   }
 
-  static void resumePollingIfNeeded() {
-    if (state == UpdState.downloading && _downloadId != null && !_polling) {
-      _pollDownload();
-    }
-  }
-
   static void dismissInstaller() {
     state = UpdState.idle;
     message = '';
     downloadedFile = null;
-    _downloadId = null;
     installReadiness = null;
     _notify();
   }
@@ -183,22 +171,80 @@ class AppUpdater {
     if (updateInfo == null) return;
     state = UpdState.downloading;
     progress = 0;
-    _downloadId = null;
     _log('download: starting url=${updateInfo!.downloadUrl}');
     _notify();
+
+    final client = http.Client();
     try {
-      final id = await _channel.invokeMethod<int>(
-        'startDownload',
-        {'url': updateInfo!.downloadUrl},
-      );
-      _downloadId = id;
-      _log('download: DownloadManager id=$id');
-      _pollDownload();
+      // Resolve destination path (same dir as native apkFile())
+      final dir = await getExternalStorageDirectory();
+      if (dir == null) throw Exception('External storage unavailable');
+      final apk = File('${dir.path}/hex_canvas_update.apk');
+      _log('download: dest=${apk.path}');
+
+      // Remove stale file so we always write fresh bytes
+      if (apk.existsSync()) {
+        apk.deleteSync();
+        _log('download: deleted existing APK');
+      }
+
+      final request = http.Request('GET', Uri.parse(updateInfo!.downloadUrl))
+        ..headers['User-Agent'] =
+            'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36';
+      // followRedirects defaults to true; maxRedirects defaults to 5
+
+      final streamed = await client.send(request);
+      _log('download: HTTP ${streamed.statusCode}'
+          ' contentLength=${streamed.contentLength}');
+
+      if (streamed.statusCode != 200) {
+        throw Exception('HTTP ${streamed.statusCode}');
+      }
+
+      final contentLength = streamed.contentLength ?? 0;
+      final sink = apk.openWrite();
+      int received = 0;
+
+      await for (final chunk in streamed.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (contentLength > 0) {
+          progress = received / contentLength;
+          _notify();
+        }
+      }
+      await sink.flush();
+      await sink.close();
+      _log('download: wrote ${received}B to disk');
+
+      // Sanity-check: valid APK (ZIP) starts with PK\x03\x04 = 50 4b 03 04
+      try {
+        final header =
+            await apk.openRead(0, 4).expand((x) => x).toList();
+        final magic =
+            header.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+        _log('download: magic=$magic'
+            ' (valid APK = "50 4b 03 04")');
+        if (header.length >= 2 && header[0] == 0x50 && header[1] == 0x4b) {
+          _log('download: APK signature OK');
+        } else {
+          _log('download: WARNING — not a ZIP/APK! first bytes=$magic');
+        }
+      } catch (e) {
+        _log('download: could not read magic bytes — $e');
+      }
+
+      downloadedFile = apk;
+      state = UpdState.ready;
+      _notify();
+      await checkInstallReady();
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
       _log('download: ERROR — $e');
       _notify();
+    } finally {
+      client.close();
     }
   }
 
@@ -213,7 +259,6 @@ class AppUpdater {
       await _channel
           .invokeMethod<void>('installApk', {'path': downloadedFile!.path});
       _log('install: native returned success — installer launched');
-      _installedBuild = updateInfo?.latestBuild ?? _installedBuild;
       message = 'Установщик запущен — следуйте его инструкциям';
     } on PlatformException catch (e) {
       _log('install: PlatformException code=${e.code} message=${e.message}');
@@ -229,64 +274,6 @@ class AppUpdater {
       message = e.toString();
       _log('install: ERROR — $e');
     }
-    _notify();
-  }
-
-  // ── Internal polling loop ─────────────────────────────────────────────────
-  static Future<void> _pollDownload() async {
-    if (_polling) return;
-    _polling = true;
-    try {
-      while (state == UpdState.downloading && _downloadId != null) {
-        await Future.delayed(const Duration(milliseconds: 700));
-
-        final raw = await _channel.invokeMethod<Map>(
-          'getDownloadStatus',
-          {'id': _downloadId},
-        );
-        if (raw == null) break;
-
-        final dmStatus = (raw['status'] as num).toInt();
-        final total = (raw['total'] as num).toInt();
-        final downloaded = (raw['downloaded'] as num).toInt();
-        final filePath = raw['filePath'] as String? ?? '';
-
-        if (dmStatus == _dmSuccessful) {
-          _log('poll: DM_SUCCESSFUL total=$total downloaded=$downloaded path=$filePath');
-          if (filePath.isNotEmpty) {
-            downloadedFile = File(filePath);
-            // Log actual file size on disk
-            try {
-              final size = downloadedFile!.existsSync()
-                  ? downloadedFile!.lengthSync()
-                  : -1;
-              _log('poll: file on disk size=${size}B');
-            } catch (_) {}
-            state = UpdState.ready;
-            _notify();
-            await checkInstallReady();
-          } else {
-            state = UpdState.error;
-            message = 'Download complete but file path is empty';
-            _log('poll: ERROR — filePath empty');
-          }
-          break;
-        } else if (dmStatus == _dmFailed) {
-          state = UpdState.error;
-          message = 'Download failed (DownloadManager error)';
-          _log('poll: DM_FAILED');
-          break;
-        } else {
-          if (total > 0) progress = downloaded / total;
-        }
-        _notify();
-      }
-    } catch (e) {
-      state = UpdState.error;
-      message = e.toString();
-      _log('poll: ERROR — $e');
-    }
-    _polling = false;
     _notify();
   }
 }
