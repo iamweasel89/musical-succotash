@@ -141,7 +141,7 @@ class HexPainter extends CustomPainter {
     final qMax = ((wr + halfW) / colStep).ceil() + 1;
 
     final paint = Paint()
-      ..color = Colors.black
+      ..color = Colors.red
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0 / scale
       ..isAntiAlias = true;
