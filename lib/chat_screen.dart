@@ -793,7 +793,8 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: TextField(
                   controller: _inputCtrl,
-                  maxLines: null,
+                  minLines: 1,
+                  maxLines: 5,
                   decoration: const InputDecoration(
                     hintText: 'Сообщение…',
                     border: OutlineInputBorder(),
