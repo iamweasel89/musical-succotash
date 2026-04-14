@@ -81,6 +81,12 @@ class AppUpdater {
     _notify();
   }
 
+  /// Called when the settings sheet reopens to resume any in-progress state.
+  /// Download is a single streaming operation, so nothing needs to be restarted.
+  static void resumePollingIfNeeded() {
+    // No-op: streaming download doesn't use background polling.
+  }
+
   static Future<void> checkInstallReady() async {
     _log('checkInstallReady: calling native…');
     try {
