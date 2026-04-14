@@ -36,8 +36,10 @@ class UpdateInfo {
 
 // ── Updater singleton ──────────────────────────────────────────────────────
 class AppUpdater {
-  static const _apiUrl =
-      'https://api.github.com/repos/iamweasel89/musical-succotash/releases/latest';
+  static const _releasesLatest =
+      'https://github.com/iamweasel89/musical-succotash/releases/latest';
+  static const _repoBase =
+      'https://github.com/iamweasel89/musical-succotash';
   static const _channel = MethodChannel('hex_canvas/updater');
 
   // ── Persistent state ──────────────────────────────────────────────────────
@@ -124,33 +126,37 @@ class AppUpdater {
           packageBuild > _installedBuild ? packageBuild : _installedBuild;
       _log('check: currentBuild=$currentBuild packageBuild=$packageBuild');
 
-      final resp = await http
-          .get(Uri.parse(_apiUrl), headers: {
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          })
-          .timeout(const Duration(seconds: 10));
-      _log('check: GitHub API status=${resp.statusCode}');
+      // Use the public releases/latest page redirect instead of the API
+      // endpoint — the API has a 60 req/hour anonymous rate limit that
+      // carrier NAT quickly exhausts; the web redirect has no such limit.
+      // GET /releases/latest → 302 → /releases/tag/build-N  (or 404 if none)
+      final releaseClient = http.Client();
+      String tagName;
+      try {
+        final req = http.Request('GET', Uri.parse(_releasesLatest))
+          ..followRedirects = false;
+        final streamed = await releaseClient
+            .send(req)
+            .timeout(const Duration(seconds: 10));
+        _log('check: releases/latest status=${streamed.statusCode}');
 
-      if (resp.statusCode == 404) {
-        state = UpdState.upToDate;
-        message = 'Build $currentBuild — no releases yet';
-        _notify();
-        return;
-      }
-      if (resp.statusCode == 403 || resp.statusCode == 429) {
-        state = UpdState.error;
-        message = 'GitHub API rate limit — подождите минуту и повторите';
-        _log('check: rate limited (${resp.statusCode})');
-        _notify();
-        return;
-      }
-      if (resp.statusCode != 200) {
-        throw Exception('GitHub API returned ${resp.statusCode}');
+        if (streamed.statusCode == 404) {
+          state = UpdState.upToDate;
+          message = 'Build $currentBuild — no releases yet';
+          _notify();
+          return;
+        }
+        if (streamed.statusCode != 302 && streamed.statusCode != 301) {
+          throw Exception('releases/latest returned ${streamed.statusCode}');
+        }
+        final location = streamed.headers['location'] ?? '';
+        _log('check: location=$location');
+        // location ends with /releases/tag/build-N
+        tagName = Uri.parse(location).pathSegments.last;
+      } finally {
+        releaseClient.close();
       }
 
-      final json = jsonDecode(resp.body) as Map<String, dynamic>;
-      final tagName = json['tag_name'] as String? ?? '';
       final latestBuild =
           int.tryParse(tagName.replaceFirst('build-', '')) ?? 0;
       _log('check: latestBuild=$latestBuild tag=$tagName');
@@ -162,17 +168,15 @@ class AppUpdater {
         return;
       }
 
-      final assets = json['assets'] as List<dynamic>;
-      if (assets.isEmpty) throw Exception('Release has no APK asset');
-      final downloadUrl = (assets.first as Map<String, dynamic>)
-          ['browser_download_url'] as String;
+      final downloadUrl =
+          '$_repoBase/releases/download/$tagName/hex-canvas.apk';
       _log('check: downloadUrl=$downloadUrl');
 
       state = UpdState.available;
       updateInfo = UpdateInfo(
         latestBuild: latestBuild,
         downloadUrl: downloadUrl,
-        releaseName: json['name'] as String? ?? 'Build $latestBuild',
+        releaseName: 'Build $latestBuild',
       );
       message = updateInfo!.releaseName;
     } catch (e) {
