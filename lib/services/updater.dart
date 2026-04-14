@@ -169,7 +169,7 @@ class AppUpdater {
       }
 
       final downloadUrl =
-          '$_repoBase/releases/download/$tagName/app-release.apk';
+          '$_repoBase/releases/download/$tagName/hex-canvas.apk';
       _log('check: downloadUrl=$downloadUrl');
 
       state = UpdState.available;

@@ -47,10 +47,11 @@ jobs:
 
       - name: Publish GitHub release
         run: |
+          cp build/app/outputs/flutter-apk/app-release.apk hex-canvas.apk
           gh release create "build-${{ github.run_number }}" \
             --title "Build ${{ github.run_number }}" \
             --notes "Commit: ${{ github.sha }}" \
             --latest \
-            build/app/outputs/flutter-apk/app-release.apk#hex-canvas.apk
+            hex-canvas.apk
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
