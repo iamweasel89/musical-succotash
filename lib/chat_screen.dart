@@ -188,35 +188,49 @@ class _ChatScreenState extends State<ChatScreen> {
       type: FileType.image,
       allowMultiple: true,
       withData: true,
+      withReadStream: true, // Android 13 Photo Picker fallback via ContentResolver
     );
     if (result == null) return;
     final added = <Attachment>[];
     for (final file in result.files) {
-      // On Android the gallery picker may return a content URI where bytes
-      // are not loaded inline; fall back to reading from the temp path.
-      var bytes = file.bytes;
-      if (bytes == null && file.path != null) {
-        try {
-          bytes = await File(file.path!).readAsBytes();
-        } catch (_) {}
+      final bytes = await _readPickedFileBytes(file);
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${file.name}: не удалось прочитать'),
+            duration: const Duration(seconds: 2),
+          ));
+        }
+        continue;
       }
-      if (bytes == null) continue;
       added.add(Attachment(
         filename: file.name,
         mimeType: _imageMime(file.extension ?? ''),
         base64Data: base64Encode(bytes),
       ));
     }
-    if (added.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Не удалось прочитать изображение'),
-          duration: Duration(seconds: 2),
-        ));
-      }
-      return;
-    }
+    if (added.isEmpty) return;
     setState(() => _pendingAttachments.addAll(added));
+  }
+
+  /// Tries three methods to read bytes from a picked file, in order:
+  /// 1. inline bytes (withData: true)
+  /// 2. read stream (withReadStream: true — works with Android content URIs)
+  /// 3. file path (older Android / desktop)
+  Future<Uint8List?> _readPickedFileBytes(PlatformFile file) async {
+    if (file.bytes != null) return file.bytes;
+    if (file.readStream != null) {
+      try {
+        final chunks = await file.readStream!.toList();
+        return Uint8List.fromList(chunks.expand((x) => x).toList());
+      } catch (_) {}
+    }
+    if (file.path != null) {
+      try {
+        return await File(file.path!).readAsBytes();
+      } catch (_) {}
+    }
+    return null;
   }
 
   Future<void> _pickFiles() async {
@@ -722,6 +736,23 @@ class _ChatScreenState extends State<ChatScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Warn when images are attached but the active provider doesn't support vision
+          if (_pendingAttachments.any((a) => a.isImage) &&
+              widget.model.settings.defaultProvider == 'deepseek')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(children: [
+                Icon(Icons.warning_amber_outlined,
+                    size: 14, color: Colors.orange[700]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'deepseek-chat не поддерживает изображения — смените провайдера на Anthropic или OpenAI',
+                    style: TextStyle(fontSize: 11, color: Colors.orange[800]),
+                  ),
+                ),
+              ]),
+            ),
           if (_pendingAttachments.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
