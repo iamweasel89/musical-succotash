@@ -730,15 +730,14 @@ class _ChatScreenState extends State<ChatScreen> {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.attach_file, size: 20),
+                icon: Icon(
+                  Icons.attach_file,
+                  color: _pendingAttachments.isNotEmpty
+                      ? Theme.of(context).colorScheme.primary
+                      : null,
+                ),
                 tooltip: 'Прикрепить файл',
                 onPressed: running ? null : _showAttachOptions,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                visualDensity: VisualDensity.compact,
-                color: _pendingAttachments.isNotEmpty
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.grey[600],
               ),
               const SizedBox(width: 8),
               Expanded(
