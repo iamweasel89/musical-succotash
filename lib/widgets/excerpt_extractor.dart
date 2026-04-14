@@ -42,6 +42,8 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   String _hDir = ''; // 'left' | 'right'
   _Word? _anchorWord;
   Set<String> _currentSelection = {};
+  bool _inPivot = false;       // hysteresis state for pivot mode
+  Set<String> _peakSelection = {}; // largest selection seen in this gesture
 
   // Buffer: list of committed text snippets
   final List<String> _buffer = [];
@@ -122,7 +124,14 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     if (anchor == null) return {};
 
     final delta = global - _panStart;
-    final inPivot = delta.dy.abs() > 20 && delta.dx.abs() >= _kThreshold;
+    // Hysteresis: enter pivot at dy>=20, exit only at dy<15 to prevent oscillation
+    final absDy = delta.dy.abs();
+    if (absDy >= 20 && delta.dx.abs() >= _kThreshold) {
+      _inPivot = true;
+    } else if (absDy < 15) {
+      _inPivot = false;
+    }
+    final inPivot = _inPivot;
 
     if (!inPivot) {
       return _wordsOnAnchorLine(anchor, global, clamped: false);
@@ -218,9 +227,10 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
 
   // ── Buffer management ─────────────────────────────────────────────────
 
-  void _commit() {
-    if (_currentSelection.isEmpty) return;
-    final selected = _allWords.where((w) => _currentSelection.contains(w.id));
+  void _commit([Set<String>? sel]) {
+    final effective = sel ?? _currentSelection;
+    if (effective.isEmpty) return;
+    final selected = _allWords.where((w) => effective.contains(w.id));
     final text = selected.map((w) => w.text).join(' ');
     if (text.trim().isEmpty) return;
     setState(() {
@@ -265,6 +275,8 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     _anchorWord = _wordAt(d.globalPosition);
     _hDir = '';
     _currentSelection = {};
+    _inPivot = false;
+    _peakSelection = {};
     setState(() {
       _addLog('PAN_START x=${d.globalPosition.dx.toStringAsFixed(1)}'
           ' y=${d.globalPosition.dy.toStringAsFixed(1)}'
@@ -296,12 +308,12 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
 
     if (_phase == _Phase.selecting) {
       final prev = _currentSelection;
-      final next = _compute(_panCurrent);
-      // Log pivot detection and mode changes
-      final inPivot = delta.dy.abs() > 20 && delta.dx.abs() >= _kThreshold;
+      final next = _compute(_panCurrent); // updates _inPivot via hysteresis
+      if (next.length > _peakSelection.length) _peakSelection = next;
+      // Log uses _inPivot (already updated by _compute)
       final curVDir = delta.dy > 0 ? 'down' : 'up';
       final allowedVDir = _hDir == 'right' ? 'down' : 'up';
-      final mode = !inPivot
+      final mode = !_inPivot
           ? 'horizontal'
           : (curVDir != allowedVDir ? 'clamped' : 'pivot-$curVDir');
       if (prev.length != next.length || mode != _lastMode) {
@@ -331,15 +343,22 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
 
   void _onPanEnd(DragEndDetails _) {
     if (_phase == _Phase.selecting) {
-      final text = _selectionText(_currentSelection);
-      _addLog('PAN_END committed="${text}" words=${_currentSelection.length}');
-      _commit();
+      // If finger jitter on lift shrank selection to <50% of peak, use peak instead
+      final sel = (_peakSelection.isNotEmpty &&
+              _currentSelection.length * 2 < _peakSelection.length)
+          ? _peakSelection
+          : _currentSelection;
+      final text = _selectionText(sel);
+      _addLog('PAN_END committed="${text}" words=${sel.length}'
+          ' (cur=${_currentSelection.length} peak=${_peakSelection.length})');
+      _commit(sel);
     } else {
       _addLog('PAN_END phase=$_phase (no commit)');
     }
     _phase = _Phase.idle;
     _lastMode = '';
     _anchorWord = null;
+    _inPivot = false;
     if (_currentSelection.isNotEmpty) {
       setState(() => _currentSelection = {});
     }
