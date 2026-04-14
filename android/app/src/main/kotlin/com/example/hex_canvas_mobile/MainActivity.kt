@@ -1,6 +1,7 @@
 package com.example.hex_canvas_mobile
 
 import android.app.DownloadManager
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -155,14 +156,15 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "installApk" -> {
-                        // Use the DownloadManager system URI directly — it is served by the
-                        // system Downloads content provider which PackageManagerService can
-                        // read without any additional permission grants.  FileProvider URIs
-                        // from our own app are not accessible to the system installer process
-                        // after the user confirms the dialog, causing silent install failure.
-                        val systemUri = call.argument<String>("systemUri")
-                        if (systemUri.isNullOrEmpty()) {
-                            result.error("INVALID_ARG", "systemUri is null or empty", null)
+                        // Build a content://downloads/my_downloads/<id> URI from the
+                        // download ID.  This is the system Downloads provider URI that
+                        // PackageManagerService can read without any extra grants.
+                        // COLUMN_LOCAL_URI may return file:// on some devices which
+                        // Android 7+ rejects ("exposed beyond app"); the content:// URI
+                        // constructed from the ID never has that problem.
+                        val id = (call.argument<Any>("id") as? Number)?.toLong()
+                        if (id == null) {
+                            result.error("INVALID_ARG", "id is null", null)
                             return@setMethodCallHandler
                         }
                         try {
@@ -180,10 +182,13 @@ class MainActivity : FlutterActivity() {
                                 )
                                 return@setMethodCallHandler
                             }
+                            val contentUri = ContentUris.withAppendedId(
+                                Uri.parse("content://downloads/my_downloads"), id
+                            )
                             startActivity(
                                 Intent(Intent.ACTION_VIEW).apply {
                                     setDataAndType(
-                                        Uri.parse(systemUri),
+                                        contentUri,
                                         "application/vnd.android.package-archive"
                                     )
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
