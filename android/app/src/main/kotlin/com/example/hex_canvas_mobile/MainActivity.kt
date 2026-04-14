@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -17,8 +18,8 @@ private const val APK_FILENAME = "hex_canvas_update.apk"
 
 class MainActivity : FlutterActivity() {
 
-    private fun apkFile(): File? {
-        val dir = applicationContext.getExternalFilesDir(null) ?: return null
+    private fun apkFile(): File {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         return File(dir, APK_FILENAME)
     }
 
@@ -39,21 +40,16 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
                         try {
-                            val dir = applicationContext.getExternalFilesDir(null)
-                            if (dir == null) {
-                                result.error("NO_STORAGE", "External storage unavailable", null)
-                                return@setMethodCallHandler
-                            }
                             // Delete any leftover APK so DownloadManager doesn't create
                             // a renamed file (hex_canvas_update-1.apk etc.)
-                            apkFile()?.delete()
+                            apkFile().delete()
                             val dm =
                                 getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                             val req = DownloadManager.Request(Uri.parse(url))
                                 .setTitle("Hex Canvas Update")
                                 .setDescription("Downloading update…")
-                                .setDestinationInExternalFilesDir(
-                                    applicationContext, null, APK_FILENAME
+                                .setDestinationInExternalPublicDir(
+                                    Environment.DIRECTORY_DOWNLOADS, APK_FILENAME
                                 )
                                 .setNotificationVisibility(
                                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
@@ -114,12 +110,12 @@ class MainActivity : FlutterActivity() {
 
                     "checkInstallReady" -> {
                         val apk = apkFile()
-                        val apkSize = if (apk?.exists() == true) apk.length() else -1L
+                        val apkSize = if (apk.exists()) apk.length() else -1L
 
                         var apkVersionCode = -1L
                         var apkPackageName = ""
                         var installedVersionCode = -1L
-                        if (apk?.exists() == true) {
+                        if (apk.exists()) {
                             try {
                                 val pi =
                                     packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
@@ -145,8 +141,8 @@ class MainActivity : FlutterActivity() {
                         result.success(
                             mapOf(
                                 "hasPermission" to canInstallPackages(),
-                                "apkExists" to (apk?.exists() ?: false),
-                                "apkPath" to (apk?.absolutePath ?: ""),
+                                "apkExists" to apk.exists(),
+                                "apkPath" to apk.absolutePath,
                                 "apkSize" to apkSize,
                                 "apkVersionCode" to apkVersionCode,
                                 "apkPackageName" to apkPackageName,
