@@ -124,7 +124,7 @@ class HexPainter extends CustomPainter {
       Offset.zero,
       5.0,
       Paint()
-        ..color = Colors.black
+        ..color = Colors.red
         ..style = PaintingStyle.fill,
     );
 
