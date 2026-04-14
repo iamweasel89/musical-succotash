@@ -16,6 +16,15 @@ private const val APK_FILENAME = "hex_canvas_update.apk"
 
 class MainActivity : FlutterActivity() {
 
+    private fun apkFile(): File? {
+        val dir = applicationContext.getExternalFilesDir(null) ?: return null
+        return File(dir, APK_FILENAME)
+    }
+
+    private fun canInstallPackages(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                packageManager.canRequestPackageInstalls()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "hex_canvas/updater")
@@ -29,6 +38,11 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
                         try {
+                            val dir = applicationContext.getExternalFilesDir(null)
+                            if (dir == null) {
+                                result.error("NO_STORAGE", "External storage unavailable", null)
+                                return@setMethodCallHandler
+                            }
                             val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                             val req = DownloadManager.Request(Uri.parse(url))
                                 .setTitle("Hex Canvas Update")
@@ -71,46 +85,62 @@ class MainActivity : FlutterActivity() {
                             )
                         )
                         cursor.close()
-                        // Return the canonical apk path rather than the DownloadManager URI,
-                        // so Flutter always holds the same path we use in FileProvider.
-                        val apkFile = File(applicationContext.getExternalFilesDir(null), APK_FILENAME)
+                        // Return the canonical apk path so Flutter always holds the exact path
+                        // that FileProvider will use — avoids /storage/emulated/0 vs /sdcard
+                        // symlink mismatches.
+                        val apk = apkFile()
                         result.success(
                             mapOf(
                                 "status" to status,
                                 "total" to total,
                                 "downloaded" to downloaded,
-                                "filePath" to apkFile.absolutePath
+                                "filePath" to (apk?.absolutePath ?: "")
+                            )
+                        )
+                    }
+
+                    // Returns a map with install-readiness info so Flutter can show
+                    // a diagnostic message before the user even taps Install.
+                    "checkInstallReady" -> {
+                        val apk = apkFile()
+                        result.success(
+                            mapOf(
+                                "hasPermission" to canInstallPackages(),
+                                "apkExists" to (apk?.exists() ?: false),
+                                "apkPath" to (apk?.absolutePath ?: "")
                             )
                         )
                     }
 
                     "installApk" -> {
                         try {
-                            // Always reconstruct the path from getExternalFilesDir() so the
-                            // File object matches what FileProvider resolves — DownloadManager
-                            // URIs sometimes use a different symlink root (/storage/emulated/0
-                            // vs /sdcard) which causes FileProvider to throw
-                            // "Failed to find configured root that contains …".
-                            val apkFile = File(applicationContext.getExternalFilesDir(null), APK_FILENAME)
-                            if (!apkFile.exists()) {
-                                result.error("NOT_FOUND", "APK file not found: ${apkFile.absolutePath}", null)
+                            val apk = apkFile()
+                            if (apk == null) {
+                                result.error("NO_STORAGE", "External storage unavailable", null)
+                                return@setMethodCallHandler
+                            }
+                            if (!apk.exists()) {
+                                result.error(
+                                    "NOT_FOUND",
+                                    "APK not found at ${apk.absolutePath} — try downloading again.",
+                                    null
+                                )
                                 return@setMethodCallHandler
                             }
 
-                            // On Android 8+ the user must explicitly enable "Install unknown
-                            // apps" for this app.  If not yet granted, open the Settings page
-                            // so they can do it, then they can tap Install again.
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                                !packageManager.canRequestPackageInstalls()
-                            ) {
-                                val settingsIntent = Intent(
-                                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                    Uri.parse("package:$packageName")
-                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                startActivity(settingsIntent)
+                            // On Android 8+ the user must enable "Install unknown apps" for
+                            // this specific app.  Open the exact Settings screen for it so the
+                            // user can grant permission, then tap Install again.
+                            if (!canInstallPackages()) {
+                                startActivity(
+                                    Intent(
+                                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                        Uri.parse("package:$packageName")
+                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
                                 result.error(
                                     "NEED_PERMISSION",
-                                    "Please enable 'Install unknown apps' for Hex Canvas, then tap Install again.",
+                                    "Разрешите установку из неизвестных источников для Hex Canvas в открывшихся настройках, затем нажмите Install снова.",
                                     null
                                 )
                                 return@setMethodCallHandler
@@ -119,14 +149,15 @@ class MainActivity : FlutterActivity() {
                             val uri = FileProvider.getUriForFile(
                                 applicationContext,
                                 "${packageName}.fileProvider",
-                                apkFile
+                                apk
                             )
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, "application/vnd.android.package-archive")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            startActivity(intent)
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, "application/vnd.android.package-archive")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
                             result.success(null)
                         } catch (e: Exception) {
                             result.error("INSTALL_ERROR", e.message, null)

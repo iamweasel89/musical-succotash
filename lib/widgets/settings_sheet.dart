@@ -622,11 +622,27 @@ class _UpdateSectionState extends State<_UpdateSection> {
         );
 
       case UpdState.ready:
+        final readiness = AppUpdater.installReadiness;
+        final warn = readiness != null && !readiness.ok
+            ? (!readiness.hasPermission
+                ? 'Нет разрешения "Установка из неизвестных источников". Нажмите Install — откроются настройки, выдайте разрешение, затем нажмите ещё раз.'
+                : 'Файл обновления не найден. Попробуйте скачать снова.')
+            : AppUpdater.message.isNotEmpty
+                ? AppUpdater.message
+                : null;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              const Icon(Icons.download_done, color: Colors.green, size: 18),
+              Icon(
+                readiness != null && !readiness.hasPermission
+                    ? Icons.warning_amber_outlined
+                    : Icons.download_done,
+                color: readiness != null && !readiness.hasPermission
+                    ? Colors.orange
+                    : Colors.green,
+                size: 18,
+              ),
               const SizedBox(width: 6),
               const Expanded(
                 child: Text('Downloaded', style: TextStyle(fontSize: 13)),
@@ -636,10 +652,10 @@ class _UpdateSectionState extends State<_UpdateSection> {
                 child: const Text('Install'),
               ),
             ]),
-            if (AppUpdater.message.isNotEmpty) ...[
+            if (warn != null) ...[
               const SizedBox(height: 4),
               Text(
-                AppUpdater.message,
+                warn,
                 style: TextStyle(fontSize: 11, color: Colors.orange[800]),
               ),
             ],

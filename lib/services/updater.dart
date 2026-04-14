@@ -8,6 +8,18 @@ import 'package:package_info_plus/package_info_plus.dart';
 // ── Update state ───────────────────────────────────────────────────────────
 enum UpdState { idle, checking, upToDate, available, downloading, ready, error }
 
+class InstallReadiness {
+  final bool hasPermission;
+  final bool apkExists;
+  final String apkPath;
+  const InstallReadiness({
+    required this.hasPermission,
+    required this.apkExists,
+    required this.apkPath,
+  });
+  bool get ok => hasPermission && apkExists;
+}
+
 class UpdateInfo {
   final int latestBuild;
   final String downloadUrl;
@@ -38,6 +50,7 @@ class AppUpdater {
   static double progress = 0;
   static UpdateInfo? updateInfo;
   static File? downloadedFile;
+  static InstallReadiness? installReadiness;
   static int? _downloadId;
   static bool _polling = false;
   static int _installedBuild = 0; // set when install is triggered
@@ -55,6 +68,23 @@ class AppUpdater {
     if (state == UpdState.downloading && _downloadId != null && !_polling) {
       _pollDownload();
     }
+  }
+
+  /// Fetches install-readiness info from native and updates [installReadiness].
+  /// Call when transitioning to UpdState.ready so the UI can show warnings.
+  static Future<void> checkInstallReady() async {
+    try {
+      final raw = await _channel.invokeMethod<Map>('checkInstallReady');
+      if (raw == null) return;
+      installReadiness = InstallReadiness(
+        hasPermission: raw['hasPermission'] as bool? ?? false,
+        apkExists: raw['apkExists'] as bool? ?? false,
+        apkPath: raw['apkPath'] as String? ?? '',
+      );
+    } catch (_) {
+      // Non-critical — if the check fails just leave installReadiness null
+    }
+    _notify();
   }
 
   // ── Public actions ────────────────────────────────────────────────────────
@@ -187,6 +217,8 @@ class AppUpdater {
           if (filePath.isNotEmpty) {
             downloadedFile = File(filePath);
             state = UpdState.ready;
+            _notify();
+            await checkInstallReady(); // populate readiness info for the UI
           } else {
             state = UpdState.error;
             message = 'Download complete but file path is empty';
