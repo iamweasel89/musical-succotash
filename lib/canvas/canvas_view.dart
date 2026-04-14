@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/app_model.dart';
 import '../models/canvas_data.dart';
@@ -336,6 +337,19 @@ class _CanvasToolbar extends StatelessWidget {
               icon: const Icon(Icons.add, size: 20),
               tooltip: 'Новая канва',
               onPressed: onNewCanvas,
+            ),
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (_, snap) {
+                if (!snap.hasData) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    'b${snap.data!.buildNumber}',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                  ),
+                );
+              },
             ),
           ],
         ),
