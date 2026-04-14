@@ -12,10 +12,12 @@ class InstallReadiness {
   final bool hasPermission;
   final bool apkExists;
   final String apkPath;
+  final int apkSize; // bytes; -1 if not found
   const InstallReadiness({
     required this.hasPermission,
     required this.apkExists,
     required this.apkPath,
+    this.apkSize = -1,
   });
   bool get ok => hasPermission && apkExists;
 }
@@ -103,9 +105,11 @@ class AppUpdater {
         hasPermission: raw['hasPermission'] as bool? ?? false,
         apkExists: raw['apkExists'] as bool? ?? false,
         apkPath: raw['apkPath'] as String? ?? '',
+        apkSize: (raw['apkSize'] as num?)?.toInt() ?? -1,
       );
       _log('checkInstallReady: hasPermission=${installReadiness!.hasPermission}'
           ' apkExists=${installReadiness!.apkExists}'
+          ' size=${installReadiness!.apkSize}B'
           ' path=${installReadiness!.apkPath}');
     } catch (e) {
       _log('checkInstallReady: error — $e');

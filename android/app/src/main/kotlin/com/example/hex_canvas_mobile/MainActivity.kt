@@ -43,6 +43,10 @@ class MainActivity : FlutterActivity() {
                                 result.error("NO_STORAGE", "External storage unavailable", null)
                                 return@setMethodCallHandler
                             }
+                            // Delete any leftover APK so DownloadManager doesn't create
+                            // a renamed file (hex_canvas_update-1.apk etc.) which would
+                            // cause FileProvider to serve the old file on install.
+                            apkFile()?.delete()
                             val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                             val req = DownloadManager.Request(Uri.parse(url))
                                 .setTitle("Hex Canvas Update")
@@ -54,6 +58,12 @@ class MainActivity : FlutterActivity() {
                                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                                 )
                                 .setMimeType("application/vnd.android.package-archive")
+                                // GitHub release assets redirect to CDN; a browser-like UA
+                                // prevents some CDN nodes from returning an error page.
+                                .addRequestHeader(
+                                    "User-Agent",
+                                    "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36"
+                                )
                             result.success(dm.enqueue(req))
                         } catch (e: Exception) {
                             result.error("DOWNLOAD_ERROR", e.message, null)
@@ -103,11 +113,13 @@ class MainActivity : FlutterActivity() {
                     // a diagnostic message before the user even taps Install.
                     "checkInstallReady" -> {
                         val apk = apkFile()
+                        val apkSize = if (apk?.exists() == true) apk.length() else -1L
                         result.success(
                             mapOf(
                                 "hasPermission" to canInstallPackages(),
                                 "apkExists" to (apk?.exists() ?: false),
-                                "apkPath" to (apk?.absolutePath ?: "")
+                                "apkPath" to (apk?.absolutePath ?: ""),
+                                "apkSize" to apkSize
                             )
                         )
                     }
