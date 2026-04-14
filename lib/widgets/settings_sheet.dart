@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/settings.dart';
@@ -604,6 +605,18 @@ class _UpdateSectionState extends State<_UpdateSection> {
                     color: Colors.white54,
                     fontFamily: 'monospace')),
             const Spacer(),
+            GestureDetector(
+              onTap: () {
+                final text = AppUpdater.log.reversed.join('\n');
+                Clipboard.setData(ClipboardData(text: text));
+              },
+              child: const Text('copy',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white38,
+                      fontFamily: 'monospace')),
+            ),
+            const SizedBox(width: 12),
             GestureDetector(
               onTap: AppUpdater.clearLog,
               child: const Text('clear',
