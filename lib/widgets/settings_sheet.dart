@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/settings.dart';
 import '../services/updater.dart';
@@ -529,11 +530,16 @@ class _UpdateSection extends StatefulWidget {
 }
 
 class _UpdateSectionState extends State<_UpdateSection> {
+  String _buildLabel = '';
+
   @override
   void initState() {
     super.initState();
     AppUpdater.addListener(_refresh);
     AppUpdater.resumePollingIfNeeded();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _buildLabel = 'Build ${info.buildNumber}');
+    });
   }
 
   @override
@@ -551,8 +557,15 @@ class _UpdateSectionState extends State<_UpdateSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Update',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+        Row(children: [
+          const Text('Update',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          if (_buildLabel.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(_buildLabel,
+                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+          ],
+        ]),
         const SizedBox(height: 8),
         _buildBody(),
       ],
