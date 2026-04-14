@@ -32,6 +32,9 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Run tests
+        run: flutter test
+
       - name: Build APK (release)
         run: flutter build apk --release --build-number=${{ github.run_number }}
 

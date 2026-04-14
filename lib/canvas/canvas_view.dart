@@ -109,10 +109,7 @@ class _CanvasViewState extends State<CanvasView>
   }
 
   void _fitAll() {
-    final activeIds = widget.model.activeCanvas.nodeIds.toSet();
-    final nodes = widget.model.nodes
-        .where((n) => activeIds.contains(n.id))
-        .toList();
+    final nodes = widget.model.activeCanvasNodes;
     if (nodes.isEmpty) {
       _centerOnOrigin();
       return;
@@ -209,8 +206,6 @@ class _CanvasViewState extends State<CanvasView>
                   listenable: widget.model,
                   builder: (_, __) {
                     final chainSet = Set<String>.from(widget.model.chainPath);
-                    final activeIds =
-                        widget.model.activeCanvas.nodeIds.toSet();
                     return Stack(
                       children: [
                         AnimatedBuilder(
@@ -220,14 +215,8 @@ class _CanvasViewState extends State<CanvasView>
                               painter: HexPainter(
                                 pan: _pan,
                                 scale: _scale,
-                                nodes: widget.model.nodes
-                                    .where((n) => activeIds.contains(n.id))
-                                    .toList(),
-                                edges: widget.model.edges
-                                    .where((e) =>
-                                        activeIds.contains(e.fromId) &&
-                                        activeIds.contains(e.toId))
-                                    .toList(),
+                                nodes: widget.model.activeCanvasNodes,
+                                edges: widget.model.activeCanvasEdges,
                                 pulse: _pulseAnim.value,
                                 selectedIds: Set.unmodifiable(chainSet),
                               ),
@@ -479,7 +468,7 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
                   ),
                 ),
                 subtitle: Text(
-                  '${canvas.nodeIds.where((id) => widget.model.nodes.any((n) => n.id == id)).length} нод',
+                  '${canvas.nodeIds.where((id) => widget.model.nodes.any((n) => n.id == id)).length} нод',  // count via model for accuracy
                   style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
                 trailing: Row(

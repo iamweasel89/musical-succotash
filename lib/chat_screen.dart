@@ -143,7 +143,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   BranchSlot _branchSlot(Node branchPoint) {
-    final usedDirs = widget.model.edges
+    final usedDirs = widget.model.activeCanvasEdges
         .where((e) => e.fromId == branchPoint.id)
         .map((e) => widget.model.nodeById(e.toId))
         .whereType<Node>()
@@ -216,7 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } else {
       final lastNode = widget.model.nodeById(_chainPath.last)!;
-      final hasChildren = widget.model.edges.any((e) => e.fromId == lastNode.id);
+      final hasChildren = widget.model.activeCanvasEdges.any((e) => e.fromId == lastNode.id);
       textSlot = hasChildren ? _branchSlot(lastNode) : _continuationSlot(lastNode);
     }
 
@@ -410,7 +410,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _siblingsOf(int chainIndex) {
     if (chainIndex == 0) return [_chainPath[chainIndex]];
     final parentId = _chainPath[chainIndex - 1];
-    return widget.model.edges
+    return widget.model.activeCanvasEdges
         .where((e) => e.fromId == parentId)
         .map((e) => e.toId)
         .toList();
@@ -420,7 +420,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final result = <String>[startId];
     var current = startId;
     for (int i = 0; i < 200; i++) {
-      final children = widget.model.edges
+      final children = widget.model.activeCanvasEdges
           .where((e) => e.fromId == current)
           .map((e) => e.toId)
           .toList();
@@ -457,7 +457,7 @@ class _ChatScreenState extends State<ChatScreen> {
     while (queue.isNotEmpty) {
       final current = queue.removeAt(0);
       toDelete.add(current);
-      for (final e in widget.model.edges) {
+      for (final e in widget.model.activeCanvasEdges) {
         if (e.fromId == current && !toDelete.contains(e.toId)) {
           queue.add(e.toId);
         }

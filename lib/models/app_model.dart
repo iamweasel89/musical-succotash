@@ -69,6 +69,20 @@ class AppModel extends ChangeNotifier {
 
   String get activeCanvasId => _activeCanvasId;
 
+  /// Nodes that belong to the active canvas.
+  List<Node> get activeCanvasNodes {
+    final ids = activeCanvas.nodeIds.toSet();
+    return nodes.where((n) => ids.contains(n.id)).toList();
+  }
+
+  /// Edges where both endpoints belong to the active canvas.
+  List<Edge> get activeCanvasEdges {
+    final ids = activeCanvas.nodeIds.toSet();
+    return edges
+        .where((e) => ids.contains(e.fromId) && ids.contains(e.toId))
+        .toList();
+  }
+
   // ── History ────────────────────────────────────────────────────────────────
   final _undoStack = <HistoryEntry>[];
   final _redoStack = <HistoryEntry>[];
