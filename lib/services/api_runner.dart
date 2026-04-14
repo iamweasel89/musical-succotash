@@ -178,11 +178,25 @@ List<Map<String, dynamic>> _convertMessages(
       return <String, dynamic>{'role': role, 'content': text};
     }
 
-    // Multimodal message
+    final images = attachments.where((a) => a.isImage).toList();
+    final textFiles = attachments.where((a) => a.isText).toList();
+
+    // Inject text file contents into the message text
+    final fullText = StringBuffer(text);
+    for (final a in textFiles) {
+      fullText.write('\n\n[${a.filename}]\n```\n${a.textContent}\n```');
+    }
+    final contentText = fullText.toString();
+
+    if (images.isEmpty) {
+      return <String, dynamic>{'role': role, 'content': contentText};
+    }
+
+    // Multimodal message (has images)
     if (provider == 'anthropic') {
       final content = <Map<String, dynamic>>[
-        if (text.isNotEmpty) {'type': 'text', 'text': text},
-        ...attachments.where((a) => a.isImage).map((a) => {
+        if (contentText.isNotEmpty) {'type': 'text', 'text': contentText},
+        ...images.map((a) => {
               'type': 'image',
               'source': {
                 'type': 'base64',
@@ -195,8 +209,8 @@ List<Map<String, dynamic>> _convertMessages(
     } else {
       // OpenAI / DeepSeek
       final content = <Map<String, dynamic>>[
-        if (text.isNotEmpty) {'type': 'text', 'text': text},
-        ...attachments.where((a) => a.isImage).map((a) => {
+        if (contentText.isNotEmpty) {'type': 'text', 'text': contentText},
+        ...images.map((a) => {
               'type': 'image_url',
               'image_url': {
                 'url': 'data:${a.mimeType};base64,${a.base64Data}',

@@ -55,6 +55,29 @@ class _TextNodeSheetState extends State<TextNodeSheet> {
   int _ownTokens() => (_node.text.length / 3).ceil();
   int _totalTokens() => (widget.buildInput(_node).length / 3).ceil();
 
+  void _showAttachOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Изображение'),
+              onTap: () { Navigator.pop(ctx); _pickImages(); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Файл'),
+              onTap: () { Navigator.pop(ctx); _pickFiles(); },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickImages() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -62,25 +85,59 @@ class _TextNodeSheetState extends State<TextNodeSheet> {
       withData: true,
     );
     if (result == null) return;
-
     final added = <Attachment>[];
     for (final file in result.files) {
       if (file.bytes == null) continue;
       added.add(Attachment(
         filename: file.name,
-        mimeType: _mimeFromExt(file.extension ?? ''),
+        mimeType: _imageMime(file.extension ?? ''),
         base64Data: base64Encode(file.bytes!),
       ));
     }
     if (added.isEmpty) return;
-
     setState(() {
       _attachments = [..._attachments, ...added];
       _save(attachments: _attachments);
     });
   }
 
-  String _mimeFromExt(String ext) {
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: true,
+      withData: true,
+    );
+    if (result == null) return;
+    final added = <Attachment>[];
+    for (final file in result.files) {
+      final bytes = file.bytes;
+      if (bytes == null) continue;
+      try {
+        final text = utf8.decode(bytes, allowMalformed: false);
+        added.add(Attachment(
+          filename: file.name,
+          mimeType: 'text/plain',
+          textContent: text,
+        ));
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${file.name}: не удалось прочитать как текст'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    }
+    if (added.isEmpty) return;
+    setState(() {
+      _attachments = [..._attachments, ...added];
+      _save(attachments: _attachments);
+    });
+  }
+
+  String _imageMime(String ext) {
     switch (ext.toLowerCase()) {
       case 'jpg':
       case 'jpeg':
@@ -186,14 +243,14 @@ class _TextNodeSheetState extends State<TextNodeSheet> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  icon: const Icon(Icons.image_outlined, size: 16),
-                  label: const Text('Фото'),
+                  icon: const Icon(Icons.attach_file, size: 16),
+                  label: const Text('Прикрепить'),
                   style: OutlinedButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   ),
-                  onPressed: _pickImages,
+                  onPressed: _showAttachOptions,
                 ),
               ],
             ),
@@ -208,7 +265,7 @@ class _TextNodeSheetState extends State<TextNodeSheet> {
                           avatar: Icon(
                             a.isImage
                                 ? Icons.image_outlined
-                                : Icons.attach_file,
+                                : Icons.description_outlined,
                             size: 14,
                           ),
                           label: Text(

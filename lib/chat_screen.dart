@@ -159,7 +159,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ── Attachments ───────────────────────────────────────────────────────────
 
-  Future<void> _pickAttachments() async {
+  void _showAttachOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('Изображение'),
+              onTap: () { Navigator.pop(ctx); _pickImages(); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Файл'),
+              onTap: () { Navigator.pop(ctx); _pickFiles(); },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImages() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
@@ -171,7 +194,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (file.bytes == null) continue;
       added.add(Attachment(
         filename: file.name,
-        mimeType: _mimeFromExt(file.extension ?? ''),
+        mimeType: _imageMime(file.extension ?? ''),
         base64Data: base64Encode(file.bytes!),
       ));
     }
@@ -179,7 +202,40 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _pendingAttachments.addAll(added));
   }
 
-  String _mimeFromExt(String ext) {
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: true,
+      withData: true,
+    );
+    if (result == null) return;
+    final added = <Attachment>[];
+    for (final file in result.files) {
+      if (file.bytes == null) continue;
+      try {
+        final text = utf8.decode(file.bytes!, allowMalformed: false);
+        added.add(Attachment(
+          filename: file.name,
+          mimeType: 'text/plain',
+          textContent: text,
+        ));
+      } catch (_) {
+        // Not valid UTF-8 (e.g. binary PDF) — skip with feedback
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${file.name}: не удалось прочитать как текст'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    }
+    if (added.isEmpty) return;
+    setState(() => _pendingAttachments.addAll(added));
+  }
+
+  String _imageMime(String ext) {
     switch (ext.toLowerCase()) {
       case 'jpg':
       case 'jpeg':
@@ -654,7 +710,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 spacing: 6,
                 runSpacing: 4,
                 children: _pendingAttachments.map((a) => Chip(
-                  avatar: const Icon(Icons.image_outlined, size: 14),
+                  avatar: Icon(
+                    a.isImage ? Icons.image_outlined : Icons.description_outlined,
+                    size: 14,
+                  ),
                   label: Text(
                     a.filename,
                     style: const TextStyle(fontSize: 11),
@@ -672,8 +731,8 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.attach_file, size: 20),
-                tooltip: 'Прикрепить изображение',
-                onPressed: running ? null : _pickAttachments,
+                tooltip: 'Прикрепить файл',
+                onPressed: running ? null : _showAttachOptions,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 visualDensity: VisualDensity.compact,
