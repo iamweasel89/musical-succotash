@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/settings.dart';
 import '../services/updater.dart';
+import 'excerpt_extractor.dart';
 
 // ── Usage helpers ─────────────────────────────────────────────────────────
 
@@ -315,6 +316,31 @@ class _SettingsSheetState extends State<SettingsSheet> {
                       .toList(),
                 ),
               ],
+            ),
+            const Divider(height: 24),
+            const Text('Эксперимент',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Извлечение отрывков'),
+              subtitle: const Text('Свайп для выбора слов из текста'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const ExcerptExtractor(
+                  text: 'Это экспериментальный режим извлечения текста.\n\n'
+                      'Проведите горизонтальный свайп чтобы выделить слова в строке. '
+                      'Продолжите вертикально чтобы захватить строки ниже или выше. '
+                      'Отпустите палец — выделение попадёт в буфер внизу.\n\n'
+                      'Свайп вправо расширяется только вниз. '
+                      'Свайп влево расширяется только вверх. '
+                      'Если изменить направление — выделение перестраивается динамически.\n\n'
+                      'Вертикальный свайп прокручивает текст. '
+                      'Кнопка со стрелкой отменяет последнее выделение.\n\n'
+                      'Здесь пока тестовый текст. В финальной версии сюда '
+                      'будет передаваться содержимое выбранных нод с канваса.',
+                ),
+              )),
             ),
             if (widget.onExport != null || widget.onImport != null) ...[
               const Divider(height: 24),
