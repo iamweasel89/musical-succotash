@@ -447,19 +447,20 @@ Future<void> _runStreaming({
     }
     return ('', 0, 0);
   } else {
-    // OpenAI / DeepSeek
+    // OpenAI / DeepSeek — usage may appear in ANY chunk (including the
+    // final one that also contains choices with finish_reason), so always
+    // read both fields rather than branching on choices being empty.
+    final usage = event['usage'] as Map<String, dynamic>?;
     final choices = event['choices'] as List? ?? [];
-    if (choices.isEmpty) {
-      final usage = event['usage'] as Map<String, dynamic>? ?? {};
-      return (
-        '',
-        usage['prompt_tokens'] as int? ?? 0,
-        usage['completion_tokens'] as int? ?? 0,
-      );
-    }
-    final delta =
-        (choices.first as Map<String, dynamic>)['delta'] as Map<String, dynamic>?;
+    final delta = choices.isEmpty
+        ? null
+        : (choices.first as Map<String, dynamic>)['delta']
+            as Map<String, dynamic>?;
     final text = delta?['content'] as String? ?? '';
-    return (text, 0, 0);
+    return (
+      text,
+      usage?['prompt_tokens'] as int? ?? 0,
+      usage?['completion_tokens'] as int? ?? 0,
+    );
   }
 }
