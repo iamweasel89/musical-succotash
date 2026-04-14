@@ -36,9 +36,6 @@ const _dmSuccessful = 8;
 const _dmFailed = 16;
 
 // ── Updater singleton ──────────────────────────────────────────────────────
-// All state is static — survives bottom-sheet close/reopen/backgrounding.
-// Download runs via Android DownloadManager (native), so backgrounding
-// does not interrupt it.
 class AppUpdater {
   static const _apiUrl =
       'https://api.github.com/repos/iamweasel89/musical-succotash/releases/latest';
@@ -53,8 +50,25 @@ class AppUpdater {
   static InstallReadiness? installReadiness;
   static int? _downloadId;
   static bool _polling = false;
-  static int _installedBuild = 0; // set when install is triggered
+  static int _installedBuild = 0;
 
+  // ── In-app log ────────────────────────────────────────────────────────────
+  static final List<String> log = [];
+  static bool showLog = false;
+
+  static void _log(String msg) {
+    final ts = DateTime.now().toIso8601String().substring(11, 23); // HH:mm:ss.ms
+    log.add('[$ts] $msg');
+    if (log.length > 200) log.removeAt(0);
+    _notify();
+  }
+
+  static void clearLog() {
+    log.clear();
+    _notify();
+  }
+
+  // ── Listeners ─────────────────────────────────────────────────────────────
   static final List<void Function()> _listeners = [];
   static void addListener(void Function() fn) => _listeners.add(fn);
   static void removeListener(void Function() fn) => _listeners.remove(fn);
@@ -62,17 +76,12 @@ class AppUpdater {
     for (final fn in List.of(_listeners)) fn();
   }
 
-  /// Call when the update UI becomes visible (e.g. sheet reopened after
-  /// coming back from background) to resume progress polling.
   static void resumePollingIfNeeded() {
     if (state == UpdState.downloading && _downloadId != null && !_polling) {
       _pollDownload();
     }
   }
 
-  /// Fetches install-readiness info from native and updates [installReadiness].
-  /// Call when transitioning to UpdState.ready so the UI can show warnings.
-  /// Call after the user confirms the installation finished (or cancelled).
   static void dismissInstaller() {
     state = UpdState.idle;
     message = '';
@@ -83,16 +92,23 @@ class AppUpdater {
   }
 
   static Future<void> checkInstallReady() async {
+    _log('checkInstallReady: calling native…');
     try {
       final raw = await _channel.invokeMethod<Map>('checkInstallReady');
-      if (raw == null) return;
+      if (raw == null) {
+        _log('checkInstallReady: native returned null');
+        return;
+      }
       installReadiness = InstallReadiness(
         hasPermission: raw['hasPermission'] as bool? ?? false,
         apkExists: raw['apkExists'] as bool? ?? false,
         apkPath: raw['apkPath'] as String? ?? '',
       );
-    } catch (_) {
-      // Non-critical — if the check fails just leave installReadiness null
+      _log('checkInstallReady: hasPermission=${installReadiness!.hasPermission}'
+          ' apkExists=${installReadiness!.apkExists}'
+          ' path=${installReadiness!.apkPath}');
+    } catch (e) {
+      _log('checkInstallReady: error — $e');
     }
     _notify();
   }
@@ -101,18 +117,19 @@ class AppUpdater {
   static Future<void> check() async {
     state = UpdState.checking;
     message = '';
+    _log('check: started');
     _notify();
     try {
       final pkgInfo = await PackageInfo.fromPlatform();
       final packageBuild = int.tryParse(pkgInfo.buildNumber) ?? 0;
-      // Use the higher of the two: actual installed build (after restart)
-      // or the build we last triggered an install for (same session).
       final currentBuild =
           packageBuild > _installedBuild ? packageBuild : _installedBuild;
+      _log('check: currentBuild=$currentBuild packageBuild=$packageBuild');
 
       final resp = await http
           .get(Uri.parse(_apiUrl), headers: {'Accept': 'application/json'})
           .timeout(const Duration(seconds: 10));
+      _log('check: GitHub API status=${resp.statusCode}');
 
       if (resp.statusCode == 404) {
         state = UpdState.upToDate;
@@ -128,6 +145,7 @@ class AppUpdater {
       final tagName = json['tag_name'] as String? ?? '';
       final latestBuild =
           int.tryParse(tagName.replaceFirst('build-', '')) ?? 0;
+      _log('check: latestBuild=$latestBuild tag=$tagName');
 
       if (latestBuild <= currentBuild) {
         state = UpdState.upToDate;
@@ -140,6 +158,7 @@ class AppUpdater {
       if (assets.isEmpty) throw Exception('Release has no APK asset');
       final downloadUrl = (assets.first as Map<String, dynamic>)
           ['browser_download_url'] as String;
+      _log('check: downloadUrl=$downloadUrl');
 
       state = UpdState.available;
       updateInfo = UpdateInfo(
@@ -151,6 +170,7 @@ class AppUpdater {
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
+      _log('check: ERROR — $e');
     }
     _notify();
   }
@@ -160,6 +180,7 @@ class AppUpdater {
     state = UpdState.downloading;
     progress = 0;
     _downloadId = null;
+    _log('download: starting url=${updateInfo!.downloadUrl}');
     _notify();
     try {
       final id = await _channel.invokeMethod<int>(
@@ -167,34 +188,34 @@ class AppUpdater {
         {'url': updateInfo!.downloadUrl},
       );
       _downloadId = id;
+      _log('download: DownloadManager id=$id');
       _pollDownload();
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
+      _log('download: ERROR — $e');
       _notify();
     }
   }
 
   static Future<void> install() async {
-    if (downloadedFile == null) return;
+    _log('install: called, downloadedFile=${downloadedFile?.path}');
+    if (downloadedFile == null) {
+      _log('install: ABORT — downloadedFile is null');
+      return;
+    }
     try {
+      _log('install: calling native installApk path=${downloadedFile!.path}');
       await _channel
           .invokeMethod<void>('installApk', {'path': downloadedFile!.path});
-      // Installer activity was launched successfully.
-      // Do NOT flip to idle here — that would cause the settings sheet to
-      // rebuild and the bottom sheet animation would cover the installer
-      // dialog that just appeared on top. Keep state=ready so the sheet
-      // stays as-is; the app will restart naturally if the user completes
-      // the installation, resetting all static state.
+      _log('install: native returned success — installer launched');
       _installedBuild = updateInfo?.latestBuild ?? _installedBuild;
       message = 'Установщик запущен — следуйте его инструкциям';
     } on PlatformException catch (e) {
+      _log('install: PlatformException code=${e.code} message=${e.message}');
       if (e.code == 'NEED_PERMISSION') {
-        // The Settings page was opened so the user can grant permission.
-        // Keep state = ready so the Install button stays visible for retry.
         message = e.message ??
             'Разрешите установку из неизвестных источников, затем нажмите Install снова.';
-        // state stays UpdState.ready
       } else {
         state = UpdState.error;
         message = e.message ?? e.toString();
@@ -202,6 +223,7 @@ class AppUpdater {
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
+      _log('install: ERROR — $e');
     }
     _notify();
   }
@@ -226,22 +248,31 @@ class AppUpdater {
         final filePath = raw['filePath'] as String? ?? '';
 
         if (dmStatus == _dmSuccessful) {
+          _log('poll: DM_SUCCESSFUL total=$total downloaded=$downloaded path=$filePath');
           if (filePath.isNotEmpty) {
             downloadedFile = File(filePath);
+            // Log actual file size on disk
+            try {
+              final size = downloadedFile!.existsSync()
+                  ? downloadedFile!.lengthSync()
+                  : -1;
+              _log('poll: file on disk size=${size}B');
+            } catch (_) {}
             state = UpdState.ready;
             _notify();
-            await checkInstallReady(); // populate readiness info for the UI
+            await checkInstallReady();
           } else {
             state = UpdState.error;
             message = 'Download complete but file path is empty';
+            _log('poll: ERROR — filePath empty');
           }
           break;
         } else if (dmStatus == _dmFailed) {
           state = UpdState.error;
           message = 'Download failed (DownloadManager error)';
+          _log('poll: DM_FAILED');
           break;
         } else {
-          // pending / running / paused — update progress
           if (total > 0) progress = downloaded / total;
         }
         _notify();
@@ -249,6 +280,7 @@ class AppUpdater {
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
+      _log('poll: ERROR — $e');
     }
     _polling = false;
     _notify();

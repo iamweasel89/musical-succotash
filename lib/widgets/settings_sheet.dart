@@ -565,10 +565,77 @@ class _UpdateSectionState extends State<_UpdateSection> {
             Text(_buildLabel,
                 style: TextStyle(fontSize: 12, color: Colors.grey[500])),
           ],
+          const Spacer(),
+          TextButton(
+            onPressed: () {
+              setState(() => AppUpdater.showLog = !AppUpdater.showLog);
+            },
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+            ),
+            child: Text(AppUpdater.showLog ? 'Скрыть лог' : 'Лог',
+                style: const TextStyle(fontSize: 11)),
+          ),
         ]),
         const SizedBox(height: 8),
         _buildBody(),
+        if (AppUpdater.showLog) _buildLog(),
       ],
+    );
+  }
+
+  Widget _buildLog() {
+    final lines = AppUpdater.log;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      constraints: const BoxConstraints(maxHeight: 220),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            const Text('Updater log',
+                style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white54,
+                    fontFamily: 'monospace')),
+            const Spacer(),
+            GestureDetector(
+              onTap: AppUpdater.clearLog,
+              child: const Text('clear',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white38,
+                      fontFamily: 'monospace')),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Expanded(
+            child: lines.isEmpty
+                ? const Text('(пусто)',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white38,
+                        fontFamily: 'monospace'))
+                : ListView.builder(
+                    itemCount: lines.length,
+                    reverse: true,
+                    itemBuilder: (_, i) => Text(
+                      lines[lines.length - 1 - i],
+                      style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.greenAccent,
+                          fontFamily: 'monospace'),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
