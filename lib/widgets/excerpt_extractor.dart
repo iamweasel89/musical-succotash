@@ -122,7 +122,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     if (anchor == null) return {};
 
     final delta = global - _panStart;
-    final inPivot = delta.dy.abs() > 20 && delta.dx.abs() > _kThreshold;
+    final inPivot = delta.dy.abs() > 20 && delta.dx.abs() >= _kThreshold;
 
     if (!inPivot) {
       return _wordsOnAnchorLine(anchor, global, clamped: false);
@@ -190,14 +190,20 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       int end = line.words.length - 1;
       if (!clamped && global != null) {
         final w = _wordAt(global);
-        if (w?.lineIdx == anchor.lineIdx) end = w!.wordIdx;
+        // Only use hit-tested word if it's on the same line AND to the right
+        if (w?.lineIdx == anchor.lineIdx && w!.wordIdx >= anchor.wordIdx) {
+          end = w.wordIdx;
+        }
       }
       _addRange(line.words, anchor.wordIdx, end, result);
     } else {
       int start = 0;
       if (!clamped && global != null) {
         final w = _wordAt(global);
-        if (w?.lineIdx == anchor.lineIdx) start = w!.wordIdx;
+        // Only use hit-tested word if it's on the same line AND to the left
+        if (w?.lineIdx == anchor.lineIdx && w!.wordIdx <= anchor.wordIdx) {
+          start = w.wordIdx;
+        }
       }
       _addRange(line.words, start, anchor.wordIdx, result);
     }
@@ -292,7 +298,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       final prev = _currentSelection;
       final next = _compute(_panCurrent);
       // Log pivot detection and mode changes
-      final inPivot = delta.dy.abs() > 20 && delta.dx.abs() > _kThreshold;
+      final inPivot = delta.dy.abs() > 20 && delta.dx.abs() >= _kThreshold;
       final curVDir = delta.dy > 0 ? 'down' : 'up';
       final allowedVDir = _hDir == 'right' ? 'down' : 'up';
       final mode = !inPivot
