@@ -1,10 +1,9 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 // ── Update state ───────────────────────────────────────────────────────────
 enum UpdState { idle, checking, upToDate, available, downloading, ready, error }
@@ -42,6 +41,10 @@ class AppUpdater {
       'https://github.com/iamweasel89/musical-succotash';
   static const _channel = MethodChannel('hex_canvas/updater');
 
+  // DownloadManager constants (mirror android.app.DownloadManager)
+  static const int _dmStatusSuccessful = 8;
+  static const int _dmStatusFailed = 16;
+
   // ── Persistent state ──────────────────────────────────────────────────────
   static UpdState state = UpdState.idle;
   static String message = '';
@@ -50,6 +53,10 @@ class AppUpdater {
   static File? downloadedFile;
   static InstallReadiness? installReadiness;
   static int _installedBuild = 0;
+
+  static int? _downloadId;
+  static bool _polling = false;
+  static String? _systemUri;
 
   // ── In-app log ────────────────────────────────────────────────────────────
   static final List<String> log = [];
@@ -80,13 +87,16 @@ class AppUpdater {
     message = '';
     downloadedFile = null;
     installReadiness = null;
+    _systemUri = null;
     _notify();
   }
 
-  /// Called when the settings sheet reopens to resume any in-progress state.
-  /// Download is a single streaming operation, so nothing needs to be restarted.
+  /// Called when the settings sheet reopens to resume any in-progress download.
   static void resumePollingIfNeeded() {
-    // No-op: streaming download doesn't use background polling.
+    if (state == UpdState.downloading && _downloadId != null && !_polling) {
+      _log('resumePollingIfNeeded: resuming poll for id=$_downloadId');
+      _pollDownload(_downloadId!);
+    }
   }
 
   static Future<void> checkInstallReady() async {
@@ -197,93 +207,95 @@ class AppUpdater {
     if (updateInfo == null) return;
     state = UpdState.downloading;
     progress = 0;
+    _systemUri = null;
+    _downloadId = null;
     _log('download: starting url=${updateInfo!.downloadUrl}');
     _notify();
 
-    final client = http.Client();
     try {
-      // Resolve destination path (same dir as native apkFile())
-      final dir = await getExternalStorageDirectory();
-      if (dir == null) throw Exception('External storage unavailable');
-      final apk = File('${dir.path}/hex_canvas_update.apk');
-      _log('download: dest=${apk.path}');
-
-      // Remove stale file so we always write fresh bytes
-      if (apk.existsSync()) {
-        apk.deleteSync();
-        _log('download: deleted existing APK');
+      final id = await _channel.invokeMethod<dynamic>(
+          'startDownload', {'url': updateInfo!.downloadUrl});
+      _downloadId = (id as num?)?.toInt();
+      if (_downloadId == null) {
+        throw Exception('startDownload returned null id');
       }
-
-      final request = http.Request('GET', Uri.parse(updateInfo!.downloadUrl))
-        ..headers['User-Agent'] =
-            'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36';
-      // followRedirects defaults to true; maxRedirects defaults to 5
-
-      final streamed = await client.send(request);
-      _log('download: HTTP ${streamed.statusCode}'
-          ' contentLength=${streamed.contentLength}');
-
-      if (streamed.statusCode != 200) {
-        throw Exception('HTTP ${streamed.statusCode}');
-      }
-
-      final contentLength = streamed.contentLength ?? 0;
-      final sink = apk.openWrite();
-      int received = 0;
-
-      await for (final chunk in streamed.stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        if (contentLength > 0) {
-          progress = received / contentLength;
-          _notify();
-        }
-      }
-      await sink.flush();
-      await sink.close();
-      _log('download: wrote ${received}B to disk');
-
-      // Sanity-check: valid APK (ZIP) starts with PK\x03\x04 = 50 4b 03 04
-      try {
-        final header =
-            await apk.openRead(0, 4).expand((x) => x).toList();
-        final magic =
-            header.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-        _log('download: magic=$magic'
-            ' (valid APK = "50 4b 03 04")');
-        if (header.length >= 2 && header[0] == 0x50 && header[1] == 0x4b) {
-          _log('download: APK signature OK');
-        } else {
-          _log('download: WARNING — not a ZIP/APK! first bytes=$magic');
-        }
-      } catch (e) {
-        _log('download: could not read magic bytes — $e');
-      }
-
-      downloadedFile = apk;
-      state = UpdState.ready;
-      _notify();
-      await checkInstallReady();
+      _log('download: DownloadManager enqueued id=$_downloadId');
+      _pollDownload(_downloadId!);
     } catch (e) {
       state = UpdState.error;
       message = e.toString();
-      _log('download: ERROR — $e');
+      _log('download: ERROR starting — $e');
       _notify();
+    }
+  }
+
+  static Future<void> _pollDownload(int id) async {
+    _polling = true;
+    try {
+      while (true) {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        if (state != UpdState.downloading) break;
+
+        Map raw;
+        try {
+          final result =
+              await _channel.invokeMethod<Map>('getDownloadStatus', {'id': id});
+          if (result == null) {
+            _log('poll: getDownloadStatus returned null');
+            break;
+          }
+          raw = result;
+        } catch (e) {
+          _log('poll: ERROR — $e');
+          state = UpdState.error;
+          message = e.toString();
+          _notify();
+          break;
+        }
+
+        final status = (raw['status'] as num?)?.toInt() ?? 0;
+        final total = (raw['total'] as num?)?.toInt() ?? 0;
+        final downloaded = (raw['downloaded'] as num?)?.toInt() ?? 0;
+        final sysUri = raw['systemUri'] as String? ?? '';
+
+        _log('poll: status=$status downloaded=$downloaded total=$total');
+
+        if (total > 0) {
+          progress = downloaded / total;
+          _notify();
+        }
+
+        if (status == _dmStatusSuccessful) {
+          _systemUri = sysUri;
+          _log('poll: SUCCESS systemUri=$_systemUri');
+          downloadedFile = null; // file is owned by DownloadManager
+          state = UpdState.ready;
+          _notify();
+          await checkInstallReady();
+          break;
+        } else if (status == _dmStatusFailed) {
+          _log('poll: FAILED status=$status');
+          state = UpdState.error;
+          message = 'Download failed (status $status)';
+          _notify();
+          break;
+        }
+      }
     } finally {
-      client.close();
+      _polling = false;
     }
   }
 
   static Future<void> install() async {
-    _log('install: called, downloadedFile=${downloadedFile?.path}');
-    if (downloadedFile == null) {
-      _log('install: ABORT — downloadedFile is null');
+    _log('install: called, systemUri=$_systemUri');
+    if (_systemUri == null || _systemUri!.isEmpty) {
+      _log('install: ABORT — _systemUri is null or empty');
       return;
     }
     try {
-      _log('install: calling native installApk path=${downloadedFile!.path}');
+      _log('install: calling native installApk systemUri=$_systemUri');
       await _channel
-          .invokeMethod<void>('installApk', {'path': downloadedFile!.path});
+          .invokeMethod<void>('installApk', {'systemUri': _systemUri});
       _log('install: native returned success — installer launched');
       message = 'Установщик запущен — следуйте его инструкциям';
     } on PlatformException catch (e) {

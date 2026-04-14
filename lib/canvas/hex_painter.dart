@@ -124,7 +124,7 @@ class HexPainter extends CustomPainter {
       Offset.zero,
       5.0,
       Paint()
-        ..color = Colors.red
+        ..color = Colors.green
         ..style = PaintingStyle.fill,
     );
 
@@ -141,7 +141,7 @@ class HexPainter extends CustomPainter {
     final qMax = ((wr + halfW) / colStep).ceil() + 1;
 
     final paint = Paint()
-      ..color = Colors.red
+      ..color = Colors.green
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0 / scale
       ..isAntiAlias = true;

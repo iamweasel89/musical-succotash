@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -45,10 +44,10 @@ class MainActivity : FlutterActivity() {
                                 return@setMethodCallHandler
                             }
                             // Delete any leftover APK so DownloadManager doesn't create
-                            // a renamed file (hex_canvas_update-1.apk etc.) which would
-                            // cause FileProvider to serve the old file on install.
+                            // a renamed file (hex_canvas_update-1.apk etc.)
                             apkFile()?.delete()
-                            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            val dm =
+                                getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                             val req = DownloadManager.Request(Uri.parse(url))
                                 .setTitle("Hex Canvas Update")
                                 .setDescription("Downloading update…")
@@ -59,12 +58,11 @@ class MainActivity : FlutterActivity() {
                                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                                 )
                                 .setMimeType("application/vnd.android.package-archive")
-                                // GitHub release assets redirect to CDN; a browser-like UA
-                                // prevents some CDN nodes from returning an error page.
                                 .addRequestHeader(
                                     "User-Agent",
                                     "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36"
                                 )
+                                .setAllowedOverMetered(true)
                             result.success(dm.enqueue(req))
                         } catch (e: Exception) {
                             result.error("DOWNLOAD_ERROR", e.message, null)
@@ -77,7 +75,8 @@ class MainActivity : FlutterActivity() {
                             result.error("INVALID_ARG", "id is null", null)
                             return@setMethodCallHandler
                         }
-                        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                        val dm =
+                            getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                         val cursor = dm.query(DownloadManager.Query().setFilterById(id))
                         if (!cursor.moveToFirst()) {
                             cursor.close()
@@ -95,36 +94,34 @@ class MainActivity : FlutterActivity() {
                                 DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR
                             )
                         )
+                        // The system-managed content URI (content://downloads/my_downloads/ID)
+                        // is served by the system Downloads provider and is accessible to
+                        // PackageManagerService without any FileProvider grants.
+                        val localUri = cursor.getString(
+                            cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+                        ) ?: ""
                         cursor.close()
-                        // Return the canonical apk path so Flutter always holds the exact path
-                        // that FileProvider will use — avoids /storage/emulated/0 vs /sdcard
-                        // symlink mismatches.
-                        val apk = apkFile()
                         result.success(
                             mapOf(
                                 "status" to status,
                                 "total" to total,
                                 "downloaded" to downloaded,
-                                "filePath" to (apk?.absolutePath ?: "")
+                                "systemUri" to localUri
                             )
                         )
                     }
 
-                    // Returns a map with install-readiness info so Flutter can show
-                    // a diagnostic message before the user even taps Install.
                     "checkInstallReady" -> {
                         val apk = apkFile()
                         val apkSize = if (apk?.exists() == true) apk.length() else -1L
 
-                        // Parse the downloaded APK to get its real versionCode and
-                        // packageName — lets us verify the APK is the right app and
-                        // has a higher versionCode than what is installed.
                         var apkVersionCode = -1L
                         var apkPackageName = ""
                         var installedVersionCode = -1L
                         if (apk?.exists() == true) {
                             try {
-                                val pi = packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
+                                val pi =
+                                    packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
                                 if (pi != null) {
                                     apkPackageName = pi.packageName ?: ""
                                     apkVersionCode =
@@ -158,20 +155,17 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "installApk" -> {
+                        // Use the DownloadManager system URI directly — it is served by the
+                        // system Downloads content provider which PackageManagerService can
+                        // read without any additional permission grants.  FileProvider URIs
+                        // from our own app are not accessible to the system installer process
+                        // after the user confirms the dialog, causing silent install failure.
+                        val systemUri = call.argument<String>("systemUri")
+                        if (systemUri.isNullOrEmpty()) {
+                            result.error("INVALID_ARG", "systemUri is null or empty", null)
+                            return@setMethodCallHandler
+                        }
                         try {
-                            val apk = apkFile()
-                            if (apk == null) {
-                                result.error("NO_STORAGE", "External storage unavailable", null)
-                                return@setMethodCallHandler
-                            }
-                            if (!apk.exists()) {
-                                result.error(
-                                    "NOT_FOUND",
-                                    "APK not found at ${apk.absolutePath} — try downloading again.",
-                                    null
-                                )
-                                return@setMethodCallHandler
-                            }
                             if (!canInstallPackages()) {
                                 startActivity(
                                     Intent(
@@ -186,40 +180,16 @@ class MainActivity : FlutterActivity() {
                                 )
                                 return@setMethodCallHandler
                             }
-
-                            val uri = FileProvider.getUriForFile(
-                                this,
-                                "${packageName}.fileProvider",
-                                apk
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(
+                                        Uri.parse(systemUri),
+                                        "application/vnd.android.package-archive"
+                                    )
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
                             )
-
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(
-                                    uri,
-                                    "application/vnd.android.package-archive"
-                                )
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-
-                            // Resolve which package installer will handle the intent
-                            // and explicitly grant it URI read permission.
-                            // This is required on Samsung (and some other OEM) devices
-                            // where the implicit FLAG_GRANT_READ_URI_PERMISSION does not
-                            // propagate to the system installer process that reads the
-                            // file after the user confirms the dialog.
-                            val ri = packageManager.resolveActivity(
-                                intent, PackageManager.MATCH_DEFAULT_ONLY
-                            )
-                            if (ri != null) {
-                                grantUriPermission(
-                                    ri.activityInfo.packageName,
-                                    uri,
-                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                )
-                            }
-
-                            startActivity(intent)
                             result.success(null)
                         } catch (e: Exception) {
                             result.error("INSTALL_ERROR", e.message, null)
