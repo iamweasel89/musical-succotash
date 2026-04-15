@@ -1,11 +1,8 @@
 package com.example.hex_canvas_mobile
 
 import android.app.DownloadManager
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -17,23 +14,6 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 private const val APK_FILENAME = "hex_canvas_update.apk"
-private const val ACTION_INSTALL_STATUS = "com.example.hex_canvas_mobile.INSTALL_STATUS"
-
-// Receives the PackageInstaller broadcast and starts the confirmation activity.
-// STATUS_PENDING_USER_ACTION carries the real "Do you want to install?" intent
-// that we must start to make the dialog appear.
-class InstallStatusReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_INSTALL_STATUS) return
-        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)
-        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-            @Suppress("DEPRECATION")
-            val confirmIntent =
-                intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
-            context.startActivity(confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
-}
 
 class MainActivity : FlutterActivity() {
 
@@ -108,12 +88,15 @@ class MainActivity : FlutterActivity() {
                                 DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR
                             )
                         )
+                        val localUriIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                        val systemUri = if (localUriIdx >= 0) cursor.getString(localUriIdx) ?: "" else ""
                         cursor.close()
                         result.success(
                             mapOf(
                                 "status" to status,
                                 "total" to total,
                                 "downloaded" to downloaded,
+                                "systemUri" to systemUri,
                             )
                         )
                     }
@@ -162,9 +145,9 @@ class MainActivity : FlutterActivity() {
                     }
 
                     "installApk" -> {
-                        val id = (call.argument<Any>("id") as? Number)?.toLong()
-                        if (id == null) {
-                            result.error("INVALID_ARG", "id is null", null)
+                        val systemUriStr = call.argument<String>("systemUri")
+                        if (systemUriStr.isNullOrEmpty()) {
+                            result.error("INVALID_ARG", "systemUri is null or empty", null)
                             return@setMethodCallHandler
                         }
                         if (!canInstallPackages()) {
@@ -181,45 +164,20 @@ class MainActivity : FlutterActivity() {
                             )
                             return@setMethodCallHandler
                         }
-                        val apk = apkFile()
-                        if (!apk.exists()) {
-                            result.error("NO_FILE", "APK not found: ${apk.absolutePath}", null)
-                            return@setMethodCallHandler
+                        // Use the DownloadManager system content URI directly with ACTION_VIEW.
+                        // This URI is owned by the system Downloads provider so PackageManagerService
+                        // can read it without any explicit grant — no FileProvider needed.
+                        try {
+                            val uri = Uri.parse(systemUriStr)
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW)
+                                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                            result.success("ok")
+                        } catch (e: Exception) {
+                            result.error("INSTALL_ERROR", e.message, null)
                         }
-                        // Use PackageInstaller session API: we read the APK ourselves and
-                        // write it to the session, so PackageManagerService never needs a
-                        // URI grant — this avoids the "exposed beyond app" / parse failure
-                        // that affects content:// URI approaches.
-                        // The broadcast STATUS_PENDING_USER_ACTION delivers the real
-                        // confirmation-dialog intent which InstallStatusReceiver must start.
-                        Thread {
-                            try {
-                                val pi = packageManager.packageInstaller
-                                val params = PackageInstaller.SessionParams(
-                                    PackageInstaller.SessionParams.MODE_FULL_INSTALL
-                                )
-                                val sessionId = pi.createSession(params)
-                                pi.openSession(sessionId).use { session ->
-                                    session.openWrite("base.apk", 0, apk.length()).use { out ->
-                                        apk.inputStream().use { it.copyTo(out) }
-                                        session.fsync(out)
-                                    }
-                                    val broadcastIntent =
-                                        Intent(ACTION_INSTALL_STATUS).setPackage(packageName)
-                                    val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                                            PendingIntent.FLAG_MUTABLE
-                                        else 0
-                                    val pending = PendingIntent.getBroadcast(
-                                        applicationContext, sessionId, broadcastIntent, flags
-                                    )
-                                    session.commit(pending.intentSender)
-                                }
-                                result.success("session:$sessionId")
-                            } catch (e: Exception) {
-                                result.error("INSTALL_ERROR", e.message, null)
-                            }
-                        }.start()
                     }
 
                     else -> result.notImplemented()

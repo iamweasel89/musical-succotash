@@ -287,16 +287,15 @@ class AppUpdater {
   }
 
   static Future<void> install() async {
-    _log('install: called, downloadId=$_downloadId');
-    if (_downloadId == null) {
-      _log('install: ABORT — _downloadId is null');
+    _log('install: called, systemUri=$_systemUri');
+    if (_systemUri == null || _systemUri!.isEmpty) {
+      _log('install: ABORT — _systemUri is null/empty');
       return;
     }
     try {
-      _log('install: calling native installApk id=$_downloadId');
-      final uri = await _channel
-          .invokeMethod<String>('installApk', {'id': _downloadId});
-      _log('install: native returned success uri=$uri — installer launched');
+      _log('install: calling native installApk systemUri=$_systemUri');
+      await _channel.invokeMethod<String>('installApk', {'systemUri': _systemUri});
+      _log('install: native returned — installer launched');
       message = 'Установщик запущен — следуйте его инструкциям';
     } on PlatformException catch (e) {
       _log('install: PlatformException code=${e.code} message=${e.message}');
