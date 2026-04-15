@@ -45,6 +45,10 @@ class _ChatScreenState extends State<ChatScreen> {
   CancelToken? _runToken;
   final List<Attachment> _pendingAttachments = [];
 
+  // Markup / thesis mode
+  bool _markupMode = false;
+  final List<_ThesisEntry> _theses = [];
+
   // Collapse state
   // When _globalCollapse=true, _collapsedOverrides = explicitly expanded nodes.
   // When _globalCollapse=false, _collapsedOverrides = explicitly collapsed nodes.
@@ -440,6 +444,18 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _enterMarkup(Node node) {
+    setState(() {
+      _markupMode = true;
+      _theses.add(_ThesisEntry(sourceNodeId: node.id, excerpt: node.text));
+    });
+  }
+
+  void _exitMarkup() => setState(() {
+        _markupMode = false;
+        _theses.clear();
+      });
+
   void _copyNode(Node node) {
     final text = widget.model.settings.hideEmoji
         ? _stripEmoji(node.text)
@@ -655,8 +671,37 @@ class _ChatScreenState extends State<ChatScreen> {
           _syncChainPath();
           return Column(
             children: [
+              if (_markupMode)
+                _MarkupBanner(
+                  count: _theses.length,
+                  onExit: _exitMarkup,
+                ),
               Expanded(child: _buildList()),
               if (_chainPath.isNotEmpty) _buildChatToolbar(),
+              if (_markupMode && _theses.isNotEmpty)
+                _ThesisPanel(
+                  theses: _theses,
+                  onRemove: (i) => setState(() => _theses.removeAt(i)),
+                  onSave: () async {
+                    final msgs = _buildMessages();
+                    await DumpService.saveDump(
+                      messages: msgs,
+                      canvasName: widget.model.activeCanvas.name,
+                      theses: _theses.map((t) => ThesisDump(
+                        sourceNodeId: t.sourceNodeId,
+                        excerpt: t.excerpt,
+                        thesis: t.thesis,
+                        answer: t.answer,
+                      )).toList(),
+                    );
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Тезисы сохранены в inbox'),
+                      duration: Duration(seconds: 2),
+                    ));
+                    _exitMarkup();
+                  },
+                ),
               _buildInputBar(),
             ],
           );
@@ -749,6 +794,8 @@ class _ChatScreenState extends State<ChatScreen> {
               : null,
           onSettings: isApi ? () => _showNodeSettings(node, i) : null,
           onDeleteBranch: () => _deleteBranch(i),
+          onMarkup: node.text.isNotEmpty ? () => _enterMarkup(node) : null,
+          markupActive: _markupMode,
         );
       },
     );
@@ -885,6 +932,8 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onRetry;
   final VoidCallback? onSettings;
   final VoidCallback? onDeleteBranch;
+  final VoidCallback? onMarkup;
+  final bool markupActive;
 
   const _ChatBubble({
     required this.node,
@@ -905,6 +954,8 @@ class _ChatBubble extends StatelessWidget {
     this.onRetry,
     this.onSettings,
     this.onDeleteBranch,
+    this.onMarkup,
+    this.markupActive = false,
   });
 
   @override
@@ -1016,6 +1067,8 @@ class _ChatBubble extends StatelessWidget {
               onRetry: onRetry,
               onSettings: onSettings,
               onDeleteBranch: onDeleteBranch,
+              onMarkup: onMarkup,
+              markupActive: markupActive,
             ),
           ],
         ),
@@ -1041,6 +1094,8 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback? onRetry;
   final VoidCallback? onSettings;
   final VoidCallback? onDeleteBranch;
+  final VoidCallback? onMarkup;
+  final bool markupActive;
 
   const _ActionRow({
     required this.onCopy,
@@ -1049,6 +1104,8 @@ class _ActionRow extends StatelessWidget {
     this.onRetry,
     this.onSettings,
     this.onDeleteBranch,
+    this.onMarkup,
+    this.markupActive = false,
   });
 
   @override
@@ -1067,6 +1124,13 @@ class _ActionRow extends StatelessWidget {
           _Btn(icon: Icons.more_horiz, tooltip: 'Настройки', onTap: onSettings!),
         if (onDeleteBranch != null)
           _Btn(icon: Icons.delete_outline, tooltip: 'Удалить ветку', onTap: onDeleteBranch!, color: Colors.red[300]),
+        if (onMarkup != null)
+          _Btn(
+            icon: Icons.format_quote_outlined,
+            tooltip: 'Добавить тезис',
+            onTap: onMarkup!,
+            color: markupActive ? Colors.deepPurple[300] : null,
+          ),
       ],
     );
   }
@@ -1184,6 +1248,195 @@ class _HistorySheet extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Thesis model ──────────────────────────────────────────────────────────────
+
+class _ThesisEntry {
+  final String sourceNodeId;
+  final String excerpt; // raw text from the node
+  String thesis;        // editable thesis text (initially same as excerpt preview)
+  String answer;
+
+  _ThesisEntry({
+    required this.sourceNodeId,
+    required this.excerpt,
+    String? thesis,
+    this.answer = '',
+  }) : thesis = thesis ?? (excerpt.length > 120 ? '${excerpt.substring(0, 120)}…' : excerpt);
+}
+
+// ── Markup banner ─────────────────────────────────────────────────────────────
+
+class _MarkupBanner extends StatelessWidget {
+  final int count;
+  final VoidCallback onExit;
+  const _MarkupBanner({required this.count, required this.onExit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.deepPurple[50],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          const Icon(Icons.format_quote_outlined, size: 16, color: Colors.deepPurple),
+          const SizedBox(width: 8),
+          Text('Режим тезисов · $count', style: const TextStyle(fontSize: 13, color: Colors.deepPurple)),
+          const Spacer(),
+          GestureDetector(
+            onTap: onExit,
+            child: const Icon(Icons.close, size: 18, color: Colors.deepPurple),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Thesis panel ──────────────────────────────────────────────────────────────
+
+class _ThesisPanel extends StatefulWidget {
+  final List<_ThesisEntry> theses;
+  final void Function(int) onRemove;
+  final VoidCallback onSave;
+  const _ThesisPanel({required this.theses, required this.onRemove, required this.onSave});
+
+  @override
+  State<_ThesisPanel> createState() => _ThesisPanelState();
+}
+
+class _ThesisPanelState extends State<_ThesisPanel> {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 280),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple[50],
+        border: Border(top: BorderSide(color: Colors.deepPurple.shade100)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.deepPurple[200],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shrinkWrap: true,
+              itemCount: widget.theses.length,
+              itemBuilder: (_, i) {
+                final t = widget.theses[i];
+                return _ThesisCard(
+                  entry: t,
+                  onRemove: () => widget.onRemove(i),
+                  onChanged: () => setState(() {}),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+                onPressed: widget.onSave,
+                child: const Text('Сохранить в inbox'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThesisCard extends StatefulWidget {
+  final _ThesisEntry entry;
+  final VoidCallback onRemove;
+  final VoidCallback onChanged;
+  const _ThesisCard({required this.entry, required this.onRemove, required this.onChanged});
+
+  @override
+  State<_ThesisCard> createState() => _ThesisCardState();
+}
+
+class _ThesisCardState extends State<_ThesisCard> {
+  late final TextEditingController _thesisCtrl;
+  late final TextEditingController _answerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _thesisCtrl = TextEditingController(text: widget.entry.thesis);
+    _answerCtrl = TextEditingController(text: widget.entry.answer);
+    _thesisCtrl.addListener(() {
+      widget.entry.thesis = _thesisCtrl.text;
+      widget.onChanged();
+    });
+    _answerCtrl.addListener(() {
+      widget.entry.answer = _answerCtrl.text;
+      widget.onChanged();
+    });
+  }
+
+  @override
+  void dispose() {
+    _thesisCtrl.dispose();
+    _answerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Text('Тезис', style: TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              GestureDetector(onTap: widget.onRemove, child: const Icon(Icons.close, size: 14, color: Colors.grey)),
+            ]),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _thesisCtrl,
+              maxLines: null,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+            ),
+            const Divider(height: 12),
+            const Text('Ответ', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _answerCtrl,
+              maxLines: null,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(
+                isDense: true,
+                hintText: 'Ваш ответ…',
+                border: InputBorder.none,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

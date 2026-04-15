@@ -9,10 +9,19 @@ import 'package:path_provider/path_provider.dart';
 ///   2. Operator drafts only (user messages, raw, for later LLM processing)
 ///
 /// Files land in: <documents>/inbox/YYYYMMDD-HHmmss-dump.md
+class ThesisDump {
+  final String sourceNodeId;
+  final String excerpt;
+  final String thesis;
+  final String answer;
+  const ThesisDump({required this.sourceNodeId, required this.excerpt, required this.thesis, required this.answer});
+}
+
 class DumpService {
   static Future<File> saveDump({
     required List<Map<String, dynamic>> messages,
     String? canvasName,
+    List<ThesisDump>? theses,
   }) async {
     final now = DateTime.now();
     final timestamp = _formatTs(now);
@@ -63,6 +72,25 @@ class DumpService {
         buf.writeln();
         buf.writeln(drafts[i]);
         buf.writeln();
+      }
+    }
+
+    // ── Theses ───────────────────────────────────────────────────────────────
+    if (theses != null && theses.isNotEmpty) {
+      buf.writeln('## Тезисы');
+      buf.writeln();
+      for (int i = 0; i < theses.length; i++) {
+        final t = theses[i];
+        buf.writeln('### Тезис ${i + 1}');
+        buf.writeln();
+        buf.writeln('**Источник:** `${t.sourceNodeId.substring(0, 6)}`');
+        buf.writeln();
+        buf.writeln(t.thesis);
+        buf.writeln();
+        if (t.answer.isNotEmpty) {
+          buf.writeln('**Ответ:** ${t.answer}');
+          buf.writeln();
+        }
       }
     }
 
