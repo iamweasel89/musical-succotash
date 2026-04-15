@@ -351,6 +351,16 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
         .showSnackBar(const SnackBar(content: Text('Лог скопирован')));
   }
 
+  void _selectAll() {
+    final text = widget.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _buffer.add(text);
+      _bufferWordIds.add(_allWords.map((w) => w.id).toSet());
+      _rebuildCommittedIds();
+    });
+  }
+
   // ── Gesture handlers ──────────────────────────────────────────────────
 
   void _stopFling() {
@@ -486,6 +496,11 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       appBar: AppBar(
         title: const Text('Извлечение'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.select_all),
+            tooltip: 'Весь текст',
+            onPressed: _selectAll,
+          ),
           if (_buffer.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.undo),
