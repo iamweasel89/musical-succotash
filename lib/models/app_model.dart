@@ -52,9 +52,14 @@ class AppModel extends ChangeNotifier {
   final List<String> chainPath = [];
   final GlobalSettings settings = GlobalSettings();
 
-  // ── Тезисы (эфемерные, не сохраняются) ───────────────────────────────────
+  // ── Тезисы ────────────────────────────────────────────────────────────────
   final List<ThesisEntry> theses = [];
-  void notifyThesesChanged() => notifyListeners();
+  void notifyThesesChanged() { save(); notifyListeners(); }
+
+  void clearTheses() {
+    theses.clear();
+    notifyThesesChanged();
+  }
 
   // ── Canvases ───────────────────────────────────────────────────────────────
   final List<CanvasData> canvases = [];
@@ -142,6 +147,15 @@ class AppModel extends ChangeNotifier {
         _activeCanvasId = canvases.first.id;
       }
 
+      // Load theses
+      final thesesRaw = _box.get('theses');
+      if (thesesRaw != null) {
+        theses.addAll(
+          (jsonDecode(thesesRaw) as List)
+              .map((j) => ThesisEntry.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+
       // First run or migration: create default canvas from existing data
       if (canvases.isEmpty) {
         final canvas = CanvasData(
@@ -171,6 +185,7 @@ class AppModel extends ChangeNotifier {
         'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
     _box.put('activeCanvasId', _activeCanvasId);
     _box.put('settings', jsonEncode(settings.toJson()));
+    _box.put('theses', jsonEncode(theses.map((t) => t.toJson()).toList()));
   }
 
   /// Save pan/zoom without triggering a full rebuild.

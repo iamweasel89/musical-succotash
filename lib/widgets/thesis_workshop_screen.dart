@@ -40,10 +40,26 @@ class _ThesisWorkshopScreenState extends State<ThesisWorkshopScreen> {
       content: Text('Тезисы сохранены в inbox'),
       duration: Duration(seconds: 2),
     ));
-    setState(() {
-      widget.model.theses.clear();
-      widget.model.notifyThesesChanged();
-    });
+    setState(() => widget.model.clearTheses());
+  }
+
+  Future<void> _confirmClear() async {
+    if (_theses.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Очистить тезисы?'),
+        content: const Text('Все тезисы будут удалены без сохранения.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) setState(() => widget.model.clearTheses());
   }
 
   @override
@@ -52,11 +68,17 @@ class _ThesisWorkshopScreenState extends State<ThesisWorkshopScreen> {
       appBar: AppBar(
         title: const Text('Режим тезисов'),
         actions: [
-          if (_theses.isNotEmpty)
+          if (_theses.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Очистить все',
+              onPressed: _confirmClear,
+            ),
             TextButton(
               onPressed: _save,
-              child: const Text('Сохранить'),
+              child: const Text('В inbox'),
             ),
+          ],
         ],
       ),
       body: _theses.isEmpty
