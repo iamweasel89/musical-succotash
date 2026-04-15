@@ -169,6 +169,9 @@ class AppModel extends ChangeNotifier {
       DecisionEntry(parentId: f, title: 'Своя хостинг-инфраструктура',
           type: DecisionType.technology, status: DecisionStatus.rejected,
           notes: 'Отказались. GitHub Actions уже настроен, Android Studio локально нежелателен.', createdAt: now),
+      DecisionEntry(parentId: f, title: 'Коллапс цепочки нод в одну группу-ноду',
+          type: DecisionType.design, status: DecisionStatus.idea,
+          notes: 'Длинные ветки на канве сжимаются в одну «группу-ноду». Раскрывается тапом. Отдельный визуальный стиль.', createdAt: now),
     ]);
   }
 

@@ -20,6 +20,8 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
   bool _topLevelOnly = false;
   String _query = '';
   final _searchCtrl = TextEditingController();
+  DecisionStatus? _filterStatus;
+  DecisionType? _filterType;
 
   @override
   void dispose() {
@@ -27,36 +29,73 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
     super.dispose();
   }
 
+  bool _entryMatches(DecisionEntry e) {
+    final q = _query.toLowerCase();
+    final textOk = q.isEmpty ||
+        e.title.toLowerCase().contains(q) ||
+        e.notes.toLowerCase().contains(q) ||
+        e.id.contains(q);
+    final statusOk = _filterStatus == null || e.status == _filterStatus;
+    final typeOk = _filterType == null || e.type == _filterType;
+    return textOk && statusOk && typeOk;
+  }
+
   // ── Flat tree ─────────────────────────────────────────────────────────────
 
   List<({DecisionEntry entry, int depth})> _buildFlat() {
-    final q = _query.toLowerCase();
+    final hasFilter = _query.isNotEmpty || _filterStatus != null || _filterType != null;
+    if (hasFilter) {
+      return _all.where(_entryMatches).map((e) => (entry: e, depth: 0)).toList();
+    }
     final result = <({DecisionEntry entry, int depth})>[];
     void visit(String? parentId, int depth) {
       for (final e in _all.where((e) => e.parentId == parentId)) {
-        final matches = q.isEmpty ||
-            e.title.toLowerCase().contains(q) ||
-            e.notes.toLowerCase().contains(q) ||
-            e.id.contains(q);
         if (_topLevelOnly && depth > 0) continue;
-        if (matches) result.add((entry: e, depth: _topLevelOnly ? 0 : depth));
+        result.add((entry: e, depth: _topLevelOnly ? 0 : depth));
         if (!_topLevelOnly) visit(e.id, depth + 1);
       }
     }
     visit(null, 0);
-    // При поиске — плоский список без иерархии
-    if (q.isNotEmpty) {
-      final found = <({DecisionEntry entry, int depth})>[];
-      for (final e in _all) {
-        if (e.title.toLowerCase().contains(q) ||
-            e.notes.toLowerCase().contains(q) ||
-            e.id.contains(q)) {
-          found.add((entry: e, depth: 0));
-        }
-      }
-      return found;
-    }
     return result;
+  }
+
+  // ── Filter bar ────────────────────────────────────────────────────────────
+
+  Widget _buildFilterBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Row(
+        children: [
+          for (final s in DecisionStatus.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: FilterChip(
+                label: Text(s.label, style: const TextStyle(fontSize: 11)),
+                selected: _filterStatus == s,
+                onSelected: (v) => setState(() => _filterStatus = v ? s : null),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                selectedColor: _decisionStatusColor(s).withOpacity(0.2),
+                checkmarkColor: _decisionStatusColor(s),
+              ),
+            ),
+          Container(width: 1, height: 20, color: Colors.grey[300],
+              margin: const EdgeInsets.symmetric(horizontal: 6)),
+          for (final t in DecisionType.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: FilterChip(
+                label: Text(t.label, style: const TextStyle(fontSize: 11)),
+                selected: _filterType == t,
+                onSelected: (v) => setState(() => _filterType = v ? t : null),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   // ── Edit sheet ────────────────────────────────────────────────────────────
@@ -98,7 +137,6 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final flat = _buildFlat();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Дерево решений'),
@@ -140,51 +178,66 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
           ),
         ],
       ),
-      body: flat.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.account_tree_outlined, size: 48, color: Colors.teal),
-                    const SizedBox(height: 16),
-                    Text(
-                      _query.isNotEmpty ? 'Ничего не найдено' : 'Нет решений',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    if (_query.isEmpty) ...[
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Нажмите + чтобы добавить первое решение.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+      body: ListenableBuilder(
+        listenable: widget.model,
+        builder: (context, _) {
+          final flat = _buildFlat();
+          return Column(
+            children: [
+              if (_all.isNotEmpty) _buildFilterBar(),
+              Expanded(
+                child: flat.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.account_tree_outlined,
+                                  size: 48, color: Colors.teal),
+                              const SizedBox(height: 16),
+                              Text(
+                                (_query.isNotEmpty ||
+                                        _filterStatus != null ||
+                                        _filterType != null)
+                                    ? 'Ничего не найдено'
+                                    : 'Нет решений',
+                                style: const TextStyle(
+                                    fontSize: 18, fontWeight: FontWeight.w600),
+                              ),
+                              if (_query.isEmpty &&
+                                  _filterStatus == null &&
+                                  _filterType == null) ...[
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Нажмите + чтобы добавить первое решение.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(0, 4, 0, 80),
+                        itemCount: flat.length,
+                        itemBuilder: (_, i) {
+                          final (:entry, :depth) = flat[i];
+                          return _DecisionTile(
+                            entry: entry,
+                            depth: depth,
+                            onTap: () => _openSheet(entry: entry),
+                            onAddChild: () => _openSheet(parentId: entry.id),
+                            onDelete: () => _delete(entry),
+                          );
+                        },
                       ),
-                    ],
-                  ],
-                ),
               ),
-            )
-          : ListenableBuilder(
-              listenable: widget.model,
-              builder: (context, _) {
-                final flat = _buildFlat();
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(0, 4, 0, 80),
-                  itemCount: flat.length,
-                  itemBuilder: (_, i) {
-                    final (:entry, :depth) = flat[i];
-                    return _DecisionTile(
-                      entry: entry,
-                      depth: depth,
-                      onTap: () => _openSheet(entry: entry),
-                      onAddChild: () => _openSheet(parentId: entry.id),
-                      onDelete: () => _delete(entry),
-                    );
-                  },
-                );
-              },
-            ),
+            ],
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openSheet(),
         backgroundColor: Colors.teal,
@@ -193,6 +246,17 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
     );
   }
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+Color _decisionStatusColor(DecisionStatus s) => switch (s) {
+      DecisionStatus.idea => Colors.grey,
+      DecisionStatus.discussion => Colors.orange,
+      DecisionStatus.accepted => Colors.blue,
+      DecisionStatus.implemented => Colors.green,
+      DecisionStatus.obsolete => Colors.brown,
+      DecisionStatus.rejected => Colors.red,
+    };
 
 // ── Tile ──────────────────────────────────────────────────────────────────────
 
@@ -213,7 +277,7 @@ class _DecisionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = _statusColor(entry.status);
+    final statusColor = _decisionStatusColor(entry.status);
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -325,14 +389,6 @@ class _DecisionTile extends StatelessWidget {
     );
   }
 
-  Color _statusColor(DecisionStatus s) => switch (s) {
-        DecisionStatus.idea => Colors.grey,
-        DecisionStatus.discussion => Colors.orange,
-        DecisionStatus.accepted => Colors.blue,
-        DecisionStatus.implemented => Colors.green,
-        DecisionStatus.obsolete => Colors.brown,
-        DecisionStatus.rejected => Colors.red,
-      };
 }
 
 // ── Edit sheet ────────────────────────────────────────────────────────────────
