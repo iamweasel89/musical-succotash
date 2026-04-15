@@ -45,6 +45,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   bool _inPivot = false;       // hysteresis state for pivot mode
   Set<String> _peakSelection = {}; // largest selection seen in this gesture
   double _bufferHeight = 215;  // resizable buffer panel height
+  bool _isFlinging = false;    // true while inertia scroll animation runs
 
   // Buffer: list of committed text snippets
   final List<String> _buffer = [];
@@ -314,7 +315,31 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
 
   // ── Gesture handlers ──────────────────────────────────────────────────
 
+  void _stopFling() {
+    if (_isFlinging) {
+      _scrollController.jumpTo(_scrollController.offset);
+      _isFlinging = false;
+    }
+  }
+
+  void _startFling(double velocityDy) {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    // velocityDy > 0: finger moved down → content scrolls up → offset decreases
+    final distance = -velocityDy * 0.35;
+    final target =
+        (pos.pixels + distance).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    if ((target - pos.pixels).abs() < 2) return;
+    final ms = (velocityDy.abs() * 0.4).clamp(200.0, 700.0).round();
+    _isFlinging = true;
+    _scrollController
+        .animateTo(target,
+            duration: Duration(milliseconds: ms), curve: Curves.decelerate)
+        .then((_) => _isFlinging = false);
+  }
+
   void _onPanStart(DragStartDetails d) {
+    _stopFling(); // cancel any running inertia scroll
     _phase = _Phase.determining;
     _panStart = d.globalPosition;
     _panCurrent = d.globalPosition;
@@ -387,7 +412,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     return joined.length > 40 ? '${joined.substring(0, 40)}…' : joined;
   }
 
-  void _onPanEnd(DragEndDetails _) {
+  void _onPanEnd(DragEndDetails d) {
     if (_phase == _Phase.selecting) {
       // If finger jitter on lift shrank selection to <50% of peak, use peak instead
       final sel = (_peakSelection.isNotEmpty &&
@@ -398,6 +423,10 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       _addLog('PAN_END committed="${text}" words=${sel.length}'
           ' (cur=${_currentSelection.length} peak=${_peakSelection.length})');
       _commit(sel);
+    } else if (_phase == _Phase.scrolling) {
+      _addLog('PAN_END phase=$_phase (no commit)');
+      final vel = d.velocity.pixelsPerSecond.dy;
+      if (vel.abs() > 80) _startFling(vel);
     } else {
       _addLog('PAN_END phase=$_phase (no commit)');
     }
@@ -430,6 +459,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
         children: [
           Expanded(
             child: GestureDetector(
+              onTapDown: (_) => _stopFling(),
               onPanStart: _onPanStart,
               onPanUpdate: _onPanUpdate,
               onPanEnd: _onPanEnd,
