@@ -711,6 +711,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildChatToolbar() {
+    final canvasName = widget.model.activeCanvas.name;
+    final msgCount = _chainPath.length;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
@@ -734,6 +736,18 @@ class _ChatScreenState extends State<ChatScreen> {
               onTap: () => _showHistory(),
             ),
           const Spacer(),
+          if (canvasName.isNotEmpty)
+            Text(
+              canvasName,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              overflow: TextOverflow.ellipsis,
+            ),
+          const SizedBox(width: 8),
+          Text(
+            '$msgCount',
+            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+          ),
+          const SizedBox(width: 4),
           _ToolBtn(
             icon: _globalCollapse ? Icons.unfold_more : Icons.unfold_less,
             tooltip: _globalCollapse ? 'Развернуть все' : 'Свернуть все',

@@ -44,6 +44,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   Set<String> _currentSelection = {};
   bool _inPivot = false;       // hysteresis state for pivot mode
   Set<String> _peakSelection = {}; // largest selection seen in this gesture
+  int _currentLineIdx = -1;    // last known paragraph index (hysteresis for _lineIdxAt)
   double _bufferHeight = 215;  // resizable buffer panel height
   bool _isFlinging = false;    // true while inertia scroll animation runs
 
@@ -103,9 +104,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   }
 
   int _lineIdxAt(double globalY) {
-    // First pass: check if Y falls within a paragraph's full visual span
-    // (first-word top → last-word bottom). Avoids misidentifying the paragraph
-    // when the finger is in the middle of a multi-line wrapped paragraph.
+    // First pass: visual span (first-word top → last-word bottom).
     for (final line in _lines) {
       if (line.words.isEmpty) continue;
       final firstBox = line.words.first.key.currentContext
@@ -117,24 +116,44 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       final top = firstBox.localToGlobal(Offset.zero).dy - 4;
       final bottom =
           lastBox.localToGlobal(Offset.zero).dy + lastBox.size.height + 4;
-      if (globalY >= top && globalY <= bottom) return line.idx;
+      if (globalY >= top && globalY <= bottom) {
+        _currentLineIdx = line.idx;
+        return line.idx;
+      }
     }
-    // Fallback: nearest paragraph center (handles gaps between paragraphs)
-    int best = -1;
+    // Fallback: nearest paragraph center with hysteresis.
+    // The current paragraph gets a 12px bonus — it must be clearly beaten
+    // before we switch, preventing oscillation at paragraph boundaries.
+    const kHysteresis = 12.0;
+    int best = _currentLineIdx;
     double bestDist = double.infinity;
+
+    // Seed bestDist with current paragraph distance (+ hysteresis bonus)
+    if (_currentLineIdx >= 0 && _currentLineIdx < _lines.length) {
+      final cur = _lines[_currentLineIdx];
+      if (cur.words.isNotEmpty) {
+        final box = cur.words.first.key.currentContext?.findRenderObject()
+            as RenderBox?;
+        if (box != null && box.hasSize) {
+          final cy = box.localToGlobal(Offset.zero).dy + box.size.height / 2;
+          bestDist = (globalY - cy).abs() + kHysteresis;
+        }
+      }
+    }
+
     for (final line in _lines) {
       if (line.words.isEmpty) continue;
       final box = line.words.first.key.currentContext?.findRenderObject()
           as RenderBox?;
       if (box == null || !box.hasSize) continue;
-      final tl = box.localToGlobal(Offset.zero);
-      final cy = tl.dy + box.size.height / 2;
+      final cy = box.localToGlobal(Offset.zero).dy + box.size.height / 2;
       final d = (globalY - cy).abs();
       if (d < bestDist) {
         bestDist = d;
         best = line.idx;
       }
     }
+    _currentLineIdx = best;
     return best;
   }
 
@@ -364,6 +383,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     _currentSelection = {};
     _inPivot = false;
     _peakSelection = {};
+    _currentLineIdx = _anchorWord?.lineIdx ?? -1;
     setState(() {
       _addLog('PAN_START x=${d.globalPosition.dx.toStringAsFixed(1)}'
           ' y=${d.globalPosition.dy.toStringAsFixed(1)}'
