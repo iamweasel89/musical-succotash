@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/app_model.dart';
 import '../models/decision_entry.dart';
@@ -16,17 +17,45 @@ class DecisionTreeScreen extends StatefulWidget {
 class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
   List<DecisionEntry> get _all => widget.model.decisions;
 
-  // ── Flat tree: depth-first order with depth level ────────────────────────
+  bool _topLevelOnly = false;
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Flat tree ─────────────────────────────────────────────────────────────
 
   List<({DecisionEntry entry, int depth})> _buildFlat() {
+    final q = _query.toLowerCase();
     final result = <({DecisionEntry entry, int depth})>[];
     void visit(String? parentId, int depth) {
       for (final e in _all.where((e) => e.parentId == parentId)) {
-        result.add((entry: e, depth: depth));
-        visit(e.id, depth + 1);
+        final matches = q.isEmpty ||
+            e.title.toLowerCase().contains(q) ||
+            e.notes.toLowerCase().contains(q) ||
+            e.id.contains(q);
+        if (_topLevelOnly && depth > 0) continue;
+        if (matches) result.add((entry: e, depth: _topLevelOnly ? 0 : depth));
+        if (!_topLevelOnly) visit(e.id, depth + 1);
       }
     }
     visit(null, 0);
+    // При поиске — плоский список без иерархии
+    if (q.isNotEmpty) {
+      final found = <({DecisionEntry entry, int depth})>[];
+      for (final e in _all) {
+        if (e.title.toLowerCase().contains(q) ||
+            e.notes.toLowerCase().contains(q) ||
+            e.id.contains(q)) {
+          found.add((entry: e, depth: 0));
+        }
+      }
+      return found;
+    }
     return result;
   }
 
@@ -51,7 +80,6 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
   }
 
   Future<void> _delete(DecisionEntry entry) async {
-    // Удаляем запись и всех потомков рекурсивно
     final toRemove = <String>{};
     void collect(String id) {
       toRemove.add(id);
@@ -72,24 +100,67 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
   Widget build(BuildContext context) {
     final flat = _buildFlat();
     return Scaffold(
-      appBar: AppBar(title: const Text('Дерево решений')),
+      appBar: AppBar(
+        title: const Text('Дерево решений'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Поиск…',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(_topLevelOnly ? Icons.unfold_more : Icons.unfold_less),
+            tooltip: _topLevelOnly ? 'Развернуть всё' : 'Свернуть до корней',
+            onPressed: () => setState(() => _topLevelOnly = !_topLevelOnly),
+          ),
+        ],
+      ),
       body: flat.isEmpty
-          ? const Center(
+          ? Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.account_tree_outlined, size: 48, color: Colors.teal),
-                    SizedBox(height: 16),
-                    Text('Нет решений',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                    SizedBox(height: 8),
+                    const Icon(Icons.account_tree_outlined, size: 48, color: Colors.teal),
+                    const SizedBox(height: 16),
                     Text(
-                      'Нажмите + чтобы добавить первое решение.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+                      _query.isNotEmpty ? 'Ничего не найдено' : 'Нет решений',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     ),
+                    if (_query.isEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Нажмите + чтобы добавить первое решение.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -99,7 +170,7 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
               builder: (context, _) {
                 final flat = _buildFlat();
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 80),
+                  padding: const EdgeInsets.fromLTRB(0, 4, 0, 80),
                   itemCount: flat.length,
                   itemBuilder: (_, i) {
                     final (:entry, :depth) = flat[i];
@@ -117,6 +188,11 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openSheet(),
         backgroundColor: Colors.teal,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
         child: const Icon(Icons.add),
       ),
     );
@@ -173,8 +249,33 @@ class _DecisionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(entry.title,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    children: [
+                      Text(entry.title,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: entry.id));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Скопировано: ${entry.id}'),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          entry.id,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.teal[400],
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   Row(
                     children: [
                       Text(entry.type.label,
