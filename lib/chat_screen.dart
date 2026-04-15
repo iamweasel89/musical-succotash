@@ -733,6 +733,7 @@ class _ChatScreenState extends State<ChatScreen> {
           renderMarkdown: widget.model.settings.renderMarkdown,
           hideEmoji: widget.model.settings.hideEmoji,
           showTime: widget.model.settings.showBubbleTime,
+          showId: widget.model.settings.showBubbleId,
           onDoubleTap: () => _toggleNodeCollapse(node.id),
           onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
           onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
@@ -874,6 +875,7 @@ class _ChatBubble extends StatelessWidget {
   final bool renderMarkdown;
   final bool hideEmoji;
   final bool showTime;
+  final bool showId;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
@@ -893,6 +895,7 @@ class _ChatBubble extends StatelessWidget {
     this.renderMarkdown = false,
     this.hideEmoji = false,
     this.showTime = false,
+    this.showId = false,
     this.onDoubleTap,
     this.onSwipeLeft,
     this.onSwipeRight,
@@ -995,11 +998,14 @@ class _ChatBubble extends StatelessWidget {
                   )),
                 ),
               ),
-            if (showTime)
+            if (showTime || showId)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  _formatBubbleTime(node.createdAt),
+                  [
+                    if (showTime) _formatBubbleTime(node.createdAt),
+                    if (showId) node.id.substring(0, 6),
+                  ].join('  ·  '),
                   style: TextStyle(fontSize: 10, color: Colors.grey[500]),
                 ),
               ),

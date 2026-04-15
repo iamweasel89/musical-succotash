@@ -369,6 +369,23 @@ class _CanvasSwitcherSheet extends StatefulWidget {
 }
 
 class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
+  String _canvasSubtitle(CanvasData canvas) {
+    final count = canvas.nodeIds
+        .where((id) => widget.model.nodes.any((n) => n.id == id))
+        .length;
+    final dt = canvas.createdAt;
+    final now = DateTime.now();
+    String dateStr;
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      dateStr =
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } else {
+      dateStr =
+          '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}';
+    }
+    return '$count нод · $dateStr';
+  }
+
   Future<void> _rename(CanvasData canvas) async {
     final ctrl = TextEditingController(text: canvas.name);
     final result = await showDialog<String>(
@@ -482,7 +499,7 @@ class _CanvasSwitcherSheetState extends State<_CanvasSwitcherSheet> {
                   ),
                 ),
                 subtitle: Text(
-                  '${canvas.nodeIds.where((id) => widget.model.nodes.any((n) => n.id == id)).length} нод',  // count via model for accuracy
+                  _canvasSubtitle(canvas),
                   style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
                 trailing: Row(

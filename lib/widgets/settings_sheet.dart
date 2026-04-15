@@ -305,6 +305,14 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 _save();
               },
             ),
+            _SwitchRow(
+              label: 'ID на пузыре',
+              value: s.showBubbleId,
+              onChanged: (v) {
+                setState(() => s.showBubbleId = v);
+                _save();
+              },
+            ),
             Row(
               children: [
                 const Text('Строк видно:',

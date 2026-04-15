@@ -19,8 +19,9 @@ class GlobalSettings {
   bool compactChat;
   int compactLines;
 
-  // Show message timestamp on bubbles
+  // Show message timestamp and/or short id on bubbles
   bool showBubbleTime;
+  bool showBubbleId;
 
   // Token usage totals (cumulative)
   int tokensInAnthropicTotal;
@@ -47,6 +48,7 @@ class GlobalSettings {
     this.compactChat = false,
     this.compactLines = 5,
     this.showBubbleTime = false,
+    this.showBubbleId = false,
     this.tokensInAnthropicTotal = 0,
     this.tokensOutAnthropicTotal = 0,
     this.tokensInOpenaiTotal = 0,
@@ -72,6 +74,7 @@ class GlobalSettings {
         'compactChat': compactChat,
         'compactLines': compactLines,
         'showBubbleTime': showBubbleTime,
+        'showBubbleId': showBubbleId,
         'tokensInAnthropicTotal': tokensInAnthropicTotal,
         'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
         'tokensInOpenaiTotal': tokensInOpenaiTotal,
@@ -97,6 +100,7 @@ class GlobalSettings {
         compactChat: j['compactChat'] as bool? ?? false,
         compactLines: j['compactLines'] as int? ?? 5,
         showBubbleTime: j['showBubbleTime'] as bool? ?? false,
+        showBubbleId: j['showBubbleId'] as bool? ?? false,
         tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
         tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
         tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,
