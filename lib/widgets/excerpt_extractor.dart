@@ -134,6 +134,26 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     return best;
   }
 
+  // When _wordAt returns null (finger between words), find the word whose
+  // horizontal center is closest to the finger X. Prevents defaulting to
+  // "select entire paragraph" when finger is in an inter-word gap.
+  int _nearestWordIdxByX(List<_Word> words, double globalX) {
+    int best = 0;
+    double bestDist = double.infinity;
+    for (int i = 0; i < words.length; i++) {
+      final box =
+          words[i].key.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      final cx = box.localToGlobal(Offset.zero).dx + box.size.width / 2;
+      final d = (globalX - cx).abs();
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
   // ── Selection computation ─────────────────────────────────────────────
 
   Set<String> _compute(Offset global) {
@@ -186,12 +206,12 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       for (int li = anchorLineIdx + 1; li < curLineIdx; li++) {
         for (final w in _lines[li].words) result.add(w.id);
       }
-      // Current paragraph: start → touch word
+      // Current paragraph: start → touch word (or nearest by X if no hit)
       final curLine = _lines[curLineIdx];
       final touchWord = _wordAt(global);
       final endIdx = (touchWord?.lineIdx == curLineIdx)
           ? touchWord!.wordIdx
-          : curLine.words.length - 1;
+          : _nearestWordIdxByX(curLine.words, global.dx);
       _addRange(curLine.words, 0, endIdx, result);
     } else {
       // Left + up
@@ -204,12 +224,12 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
       for (int li = curLineIdx + 1; li < anchorLineIdx; li++) {
         for (final w in _lines[li].words) result.add(w.id);
       }
-      // Current (topmost) paragraph: touch word → end
+      // Current (topmost) paragraph: touch word → end (or nearest by X if no hit)
       final curLine = _lines[curLineIdx];
       final touchWord = _wordAt(global);
       final startIdx = (touchWord?.lineIdx == curLineIdx)
           ? touchWord!.wordIdx
-          : 0;
+          : _nearestWordIdxByX(curLine.words, global.dx);
       _addRange(curLine.words, startIdx, curLine.words.length - 1, result);
     }
 
