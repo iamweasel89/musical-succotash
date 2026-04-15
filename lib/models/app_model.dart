@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'canvas_data.dart';
+import 'decision_entry.dart';
 import 'edge.dart';
 import 'node.dart';
 import 'settings.dart';
@@ -54,6 +55,10 @@ class AppModel extends ChangeNotifier {
 
   // ── Тезисы ────────────────────────────────────────────────────────────────
   final List<ThesisEntry> theses = [];
+
+  // ── Дерево решений ────────────────────────────────────────────────────────
+  final List<DecisionEntry> decisions = [];
+  void notifyDecisionsChanged() { save(); notifyListeners(); }
   void notifyThesesChanged() { save(); notifyListeners(); }
 
   void clearTheses() {
@@ -156,6 +161,15 @@ class AppModel extends ChangeNotifier {
         );
       }
 
+      // Load decisions
+      final decisionsRaw = _box.get('decisions');
+      if (decisionsRaw != null) {
+        decisions.addAll(
+          (jsonDecode(decisionsRaw) as List)
+              .map((j) => DecisionEntry.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+
       // First run or migration: create default canvas from existing data
       if (canvases.isEmpty) {
         final canvas = CanvasData(
@@ -186,6 +200,7 @@ class AppModel extends ChangeNotifier {
     _box.put('activeCanvasId', _activeCanvasId);
     _box.put('settings', jsonEncode(settings.toJson()));
     _box.put('theses', jsonEncode(theses.map((t) => t.toJson()).toList()));
+    _box.put('decisions', jsonEncode(decisions.map((d) => d.toJson()).toList()));
   }
 
   /// Save pan/zoom without triggering a full rebuild.

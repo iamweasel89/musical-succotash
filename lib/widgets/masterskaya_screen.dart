@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_model.dart';
+import 'decision_tree_screen.dart';
 import 'excerpt_extractor.dart';
 import 'thesis_workshop_screen.dart';
 
@@ -64,6 +65,14 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'Формулировка и ответы — Я1–Я8',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => ThesisWorkshopScreen(model: model),
+            )),
+          ),
+          _Room(
+            icon: Icons.account_tree_outlined,
+            title: 'Дерево решений',
+            subtitle: 'Архитектура, термины, статусы',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => DecisionTreeScreen(model: model),
             )),
           ),
         ],
