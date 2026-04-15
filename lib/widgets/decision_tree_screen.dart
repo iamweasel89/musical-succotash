@@ -193,11 +193,6 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
     );
   }
 }
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
 
 // ── Tile ──────────────────────────────────────────────────────────────────────
 
