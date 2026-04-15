@@ -600,17 +600,43 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
                 ),
                 Expanded(
                   child: SingleChildScrollView(
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: List.generate(
                         _buffer.length,
-                        (i) => InputChip(
-                          label: Text(
-                            _buffer[i],
-                            style: const TextStyle(fontSize: 12),
+                        (i) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .secondaryContainer
+                                  .withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding:
+                                const EdgeInsets.fromLTRB(10, 6, 4, 6),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _buffer[i],
+                                    style:
+                                        const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _removeChip(i),
+                                  child: const Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                        6, 0, 4, 0),
+                                    child: Icon(Icons.close, size: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          onDeleted: () => _removeChip(i),
                         ),
                       ),
                     ),
