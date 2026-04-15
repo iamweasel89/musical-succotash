@@ -44,6 +44,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   Set<String> _currentSelection = {};
   bool _inPivot = false;       // hysteresis state for pivot mode
   Set<String> _peakSelection = {}; // largest selection seen in this gesture
+  double _bufferHeight = 215;  // resizable buffer panel height
 
   // Buffer: list of committed text snippets
   final List<String> _buffer = [];
@@ -443,7 +444,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
               ),
             ),
           ),
-          if (_buffer.isNotEmpty) _buildBuffer(context),
+          if (_buffer.isNotEmpty) _buildResizableBuffer(context),
           _buildLogBar(context),
         ],
       ),
@@ -498,49 +499,77 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     );
   }
 
-  Widget _buildBuffer(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 215),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('Выбранное',
-                  style: Theme.of(context).textTheme.labelSmall),
-              const Spacer(),
-              TextButton(
-                onPressed: _copyAll,
-                child: const Text('Копировать всё'),
-              ),
-            ],
-          ),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: List.generate(
-                  _buffer.length,
-                  (i) => InputChip(
-                    label: Text(
-                      _buffer[i],
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    onDeleted: () => _removeChip(i),
-                  ),
+  Widget _buildResizableBuffer(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Draggable divider with handle
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragUpdate: (d) {
+            setState(() {
+              _bufferHeight =
+                  (_bufferHeight - d.delta.dy).clamp(80.0, 480.0);
+            });
+          },
+          child: Container(
+            height: 18,
+            color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+            child: Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).dividerColor,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+        // Buffer content
+        SizedBox(
+          height: _bufferHeight,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Выбранное',
+                        style: Theme.of(context).textTheme.labelSmall),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _copyAll,
+                      child: const Text('Копировать всё'),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: List.generate(
+                        _buffer.length,
+                        (i) => InputChip(
+                          label: Text(
+                            _buffer[i],
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          onDeleted: () => _removeChip(i),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
