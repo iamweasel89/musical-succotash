@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_model.dart';
 import 'decision_tree_screen.dart';
 import 'excerpt_extractor.dart';
+import 'inbox_screen.dart';
 import 'thesis_workshop_screen.dart';
 
 // ── Мастерская — экран с комнатами ────────────────────────────────────────────
@@ -73,6 +74,14 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'Архитектура, термины, статусы',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => DecisionTreeScreen(model: model),
+            )),
+          ),
+          _Room(
+            icon: Icons.inbox_outlined,
+            title: 'Инбокс',
+            subtitle: 'Дампы тезисов и диалогов',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const InboxScreen(),
             )),
           ),
         ],

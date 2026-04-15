@@ -118,6 +118,9 @@ class AppModel extends ChangeNotifier {
       DecisionEntry(parentId: a, title: 'Инбокс = documents/inbox/ (markdown-файлы)',
           type: DecisionType.architecture, status: DecisionStatus.implemented,
           notes: 'DumpService пишет *.md с YAML-фронтматтером. Для LLM-разбора позже.', createdAt: now),
+      DecisionEntry(id: 'seed_inbox_o2', parentId: a, title: 'Просмотр инбокса внутри приложения (О2)',
+          type: DecisionType.design, status: DecisionStatus.implemented,
+          notes: 'Комната в Мастерской. Список *.md файлов, сортировка новые сначала. Тап — markdown-просмотр. Удаление с подтверждением.', createdAt: now),
       DecisionEntry(parentId: a, title: 'ExcerptExtractor с onConfirm для переиспользования',
           type: DecisionType.architecture, status: DecisionStatus.implemented,
           notes: 'Один виджет — два режима: standalone (копировать) и встроенный (в тезисы).', createdAt: now),
@@ -173,6 +176,24 @@ class AppModel extends ChangeNotifier {
           type: DecisionType.design, status: DecisionStatus.idea,
           notes: 'Длинные ветки на канве сжимаются в одну «группу-ноду». Раскрывается тапом. Отдельный визуальный стиль.', createdAt: now),
     ]);
+  }
+
+  // Добавляет новые seed-записи к уже существующему дереву (по фиксированному ID).
+  void _migrateDecisions() {
+    final ids = decisions.map((e) => e.id).toSet();
+    final now = DateTime(2025, 4, 15);
+    const a = 'seed_arch';
+    if (!ids.contains('seed_inbox_o2')) {
+      decisions.add(DecisionEntry(
+        id: 'seed_inbox_o2',
+        parentId: a,
+        title: 'Просмотр инбокса внутри приложения (О2)',
+        type: DecisionType.design,
+        status: DecisionStatus.implemented,
+        notes: 'Комната в Мастерской. Список *.md файлов, сортировка новые сначала. Тап — markdown-просмотр. Удаление с подтверждением.',
+        createdAt: now,
+      ));
+    }
   }
 
   void clearTheses() {
@@ -284,6 +305,7 @@ class AppModel extends ChangeNotifier {
         );
       }
       if (decisions.isEmpty) _seedDecisions();
+      _migrateDecisions();
 
       // First run or migration: create default canvas from existing data
       if (canvases.isEmpty) {
