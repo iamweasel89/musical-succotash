@@ -130,10 +130,11 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
   // ── Edit sheet ────────────────────────────────────────────────────────────
 
   Future<void> _openSheet({DecisionEntry? entry, String? parentId}) async {
+    final existingIds = _all.map((e) => e.id).toSet();
     final result = await showModalBottomSheet<DecisionEntry>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _DecisionSheet(entry: entry, parentId: parentId),
+      builder: (_) => _DecisionSheet(entry: entry, parentId: parentId, existingIds: existingIds),
     );
     if (result == null) return;
     setState(() {
@@ -431,7 +432,8 @@ class _DecisionTile extends StatelessWidget {
 class _DecisionSheet extends StatefulWidget {
   final DecisionEntry? entry;
   final String? parentId;
-  const _DecisionSheet({this.entry, this.parentId});
+  final Set<String> existingIds;
+  const _DecisionSheet({this.entry, this.parentId, this.existingIds = const {}});
 
   @override
   State<_DecisionSheet> createState() => _DecisionSheetState();
@@ -465,7 +467,7 @@ class _DecisionSheetState extends State<_DecisionSheet> {
     if (title.isEmpty) return;
     final e = widget.entry;
     final result = DecisionEntry(
-      id: e?.id,
+      id: e?.id ?? DecisionEntry.genUniqueId(widget.existingIds),
       parentId: e?.parentId ?? widget.parentId,
       title: title,
       type: _type,

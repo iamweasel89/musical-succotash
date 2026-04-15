@@ -51,13 +51,17 @@ class DecisionEntry {
     this.status = DecisionStatus.idea,
     this.notes = '',
     DateTime? createdAt,
-  })  : id = id ?? _genId(),
+  })  : id = id ?? genUniqueId(),
         createdAt = createdAt ?? DateTime.now();
 
-  static String _genId() {
+  static String genUniqueId([Set<String> existing = const {}]) {
     const chars = '0123456789abcdef';
     final r = Random.secure();
-    return List.generate(6, (_) => chars[r.nextInt(chars.length)]).join();
+    String id;
+    do {
+      id = List.generate(6, (_) => chars[r.nextInt(chars.length)]).join();
+    } while (existing.contains(id));
+    return id;
   }
 
   Map<String, dynamic> toJson() => {
