@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/app_model.dart';
 import '../models/decision_entry.dart';
@@ -98,6 +99,34 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
     );
   }
 
+  // ── Export (Т4) ───────────────────────────────────────────────────────────
+
+  void _exportMarkdown() {
+    final buf = StringBuffer();
+    final now = DateTime.now();
+    buf.writeln('# Дерево решений');
+    buf.writeln();
+    buf.writeln('_Экспорт: ${now.day.toString().padLeft(2,'0')}.${now.month.toString().padLeft(2,'0')}.${now.year}_');
+    buf.writeln();
+
+    void visit(String? parentId, int depth) {
+      for (final e in _all.where((e) => e.parentId == parentId)) {
+        final indent = '  ' * depth;
+        buf.write('$indent- **${e.title}**');
+        buf.write(' `${e.id}`');
+        buf.write(' · ${e.type.label} · ${e.status.label}');
+        buf.writeln();
+        if (e.notes.isNotEmpty) {
+          buf.writeln('$indent  > ${e.notes}');
+        }
+        visit(e.id, depth + 1);
+      }
+    }
+    visit(null, 0);
+
+    Share.share(buf.toString(), subject: 'Дерево решений');
+  }
+
   // ── Edit sheet ────────────────────────────────────────────────────────────
 
   Future<void> _openSheet({DecisionEntry? entry, String? parentId}) async {
@@ -171,6 +200,12 @@ class _DecisionTreeScreenState extends State<DecisionTreeScreen> {
           ),
         ),
         actions: [
+          if (_all.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.ios_share),
+              tooltip: 'Экспорт в markdown',
+              onPressed: _exportMarkdown,
+            ),
           IconButton(
             icon: Icon(_topLevelOnly ? Icons.unfold_more : Icons.unfold_less),
             tooltip: _topLevelOnly ? 'Развернуть всё' : 'Свернуть до корней',

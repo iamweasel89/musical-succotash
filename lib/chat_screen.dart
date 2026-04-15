@@ -1051,17 +1051,6 @@ class _ChatBubble extends StatelessWidget {
                   )),
                 ),
               ),
-            if (showTime || showId)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  [
-                    if (showTime) _formatBubbleTime(node.createdAt),
-                    if (showId) node.id.substring(0, 6),
-                  ].join('  ·  '),
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                ),
-              ),
             _ActionRow(
               onCopy: onCopy,
               onEdit: onEdit,
@@ -1072,6 +1061,37 @@ class _ChatBubble extends StatelessWidget {
               onMarkup: onMarkup,
               markupActive: markupActive,
             ),
+            if (showTime || showId)
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (showTime)
+                      Text(
+                        _formatBubbleTime(node.createdAt),
+                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                      ),
+                    if (showTime && showId)
+                      Text('  ·  ',
+                          style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                    if (showId)
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: node.id));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Скопировано: ${node.id.substring(0, 6)}'),
+                            duration: const Duration(seconds: 1),
+                          ));
+                        },
+                        child: Text(
+                          node.id.substring(0, 6),
+                          style: TextStyle(fontSize: 10, color: Colors.teal[400]),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
