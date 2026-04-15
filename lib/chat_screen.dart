@@ -186,7 +186,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _pickImages() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'],
         allowMultiple: true,
         withData: true,
       );
