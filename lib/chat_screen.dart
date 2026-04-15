@@ -732,6 +732,7 @@ class _ChatScreenState extends State<ChatScreen> {
           maxLines: widget.model.settings.compactLines,
           renderMarkdown: widget.model.settings.renderMarkdown,
           hideEmoji: widget.model.settings.hideEmoji,
+          showTime: widget.model.settings.showBubbleTime,
           onDoubleTap: () => _toggleNodeCollapse(node.id),
           onSwipeLeft: siblings.length > 1 ? () => _switchBranch(i, 1) : null,
           onSwipeRight: siblings.length > 1 ? () => _switchBranch(i, -1) : null,
@@ -872,6 +873,7 @@ class _ChatBubble extends StatelessWidget {
   final int maxLines;
   final bool renderMarkdown;
   final bool hideEmoji;
+  final bool showTime;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
@@ -890,6 +892,7 @@ class _ChatBubble extends StatelessWidget {
     this.maxLines = 5,
     this.renderMarkdown = false,
     this.hideEmoji = false,
+    this.showTime = false,
     this.onDoubleTap,
     this.onSwipeLeft,
     this.onSwipeRight,
@@ -992,6 +995,14 @@ class _ChatBubble extends StatelessWidget {
                   )),
                 ),
               ),
+            if (showTime)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  _formatBubbleTime(node.createdAt),
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                ),
+              ),
             _ActionRow(
               onCopy: onCopy,
               onEdit: onEdit,
@@ -1005,6 +1016,16 @@ class _ChatBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatBubbleTime(DateTime dt) {
+  final now = DateTime.now();
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+    return '$h:$m';
+  }
+  return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')} $h:$m';
 }
 
 class _ActionRow extends StatelessWidget {

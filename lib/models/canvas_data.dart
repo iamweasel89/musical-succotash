@@ -9,6 +9,7 @@ class CanvasData {
   double panX;
   double panY;
   double zoom;
+  final DateTime createdAt;
 
   CanvasData({
     String? id,
@@ -19,9 +20,11 @@ class CanvasData {
     this.panX = 0,
     this.panY = 0,
     this.zoom = 1.0,
+    DateTime? createdAt,
   })  : id = id ?? const Uuid().v4(),
         nodeIds = nodeIds ?? [],
-        chainPath = chainPath ?? [];
+        chainPath = chainPath ?? [],
+        createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -32,6 +35,7 @@ class CanvasData {
         'panX': panX,
         'panY': panY,
         'zoom': zoom,
+        'createdAt': createdAt.millisecondsSinceEpoch,
       };
 
   factory CanvasData.fromJson(Map<String, dynamic> j) => CanvasData(
@@ -43,5 +47,8 @@ class CanvasData {
         panX: (j['panX'] as num?)?.toDouble() ?? 0,
         panY: (j['panY'] as num?)?.toDouble() ?? 0,
         zoom: (j['zoom'] as num?)?.toDouble() ?? 1.0,
+        createdAt: j['createdAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int)
+            : DateTime.now(),
       );
 }

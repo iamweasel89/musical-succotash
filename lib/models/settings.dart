@@ -19,6 +19,9 @@ class GlobalSettings {
   bool compactChat;
   int compactLines;
 
+  // Show message timestamp on bubbles
+  bool showBubbleTime;
+
   // Token usage totals (cumulative)
   int tokensInAnthropicTotal;
   int tokensOutAnthropicTotal;
@@ -43,6 +46,7 @@ class GlobalSettings {
     this.defaultTemperature = 0.7,
     this.compactChat = false,
     this.compactLines = 5,
+    this.showBubbleTime = false,
     this.tokensInAnthropicTotal = 0,
     this.tokensOutAnthropicTotal = 0,
     this.tokensInOpenaiTotal = 0,
@@ -67,6 +71,7 @@ class GlobalSettings {
         'defaultTemperature': defaultTemperature,
         'compactChat': compactChat,
         'compactLines': compactLines,
+        'showBubbleTime': showBubbleTime,
         'tokensInAnthropicTotal': tokensInAnthropicTotal,
         'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
         'tokensInOpenaiTotal': tokensInOpenaiTotal,
@@ -91,6 +96,7 @@ class GlobalSettings {
         defaultTemperature: (j['defaultTemperature'] as num?)?.toDouble() ?? 0.7,
         compactChat: j['compactChat'] as bool? ?? false,
         compactLines: j['compactLines'] as int? ?? 5,
+        showBubbleTime: j['showBubbleTime'] as bool? ?? false,
         tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
         tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
         tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,

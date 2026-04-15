@@ -297,6 +297,14 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 _save();
               },
             ),
+            _SwitchRow(
+              label: 'Время на пузыре',
+              value: s.showBubbleTime,
+              onChanged: (v) {
+                setState(() => s.showBubbleTime = v);
+                _save();
+              },
+            ),
             Row(
               children: [
                 const Text('Строк видно:',
