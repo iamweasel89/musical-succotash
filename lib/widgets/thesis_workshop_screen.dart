@@ -160,6 +160,9 @@ class _ThesisCardState extends State<ThesisCard> {
   CancelToken? _formulateToken;
   bool _formulating = false;
   String? _formulateError;
+  CancelToken? _answerToken;
+  bool _answering = false;
+  String? _answerError;
 
   @override
   void initState() {
@@ -179,6 +182,7 @@ class _ThesisCardState extends State<ThesisCard> {
   @override
   void dispose() {
     _formulateToken?.cancel();
+    _answerToken?.cancel();
     _thesisCtrl.dispose();
     _answerCtrl.dispose();
     super.dispose();
@@ -242,6 +246,67 @@ class _ThesisCardState extends State<ThesisCard> {
     setState(() {
       _formulating = false;
       _formulateToken = null;
+    });
+  }
+
+  Future<void> _answerThesis() async {
+    if (_answering) return;
+    final thesis = widget.entry.thesis.trim();
+    if (thesis.isEmpty) return;
+
+    final settings = widget.model.settings;
+    final apiSettings = ApiNodeSettings(
+      provider: settings.defaultProvider,
+      model: settings.defaultModel,
+      maxTokens: settings.defaultMaxTokens,
+      temperature: settings.defaultTemperature,
+    );
+    final stubNode = Node(type: NodeType.api, position: const HexPos(0, 0));
+    final prompt =
+        'Ответь кратко и по существу на следующий тезис. '
+        'Только ответ — без вступлений и повторения тезиса.\n\n'
+        'Тезис:\n$thesis';
+
+    setState(() {
+      _answering = true;
+      _answerError = null;
+    });
+
+    final buffer = StringBuffer();
+    final token = CancelToken();
+    _answerToken = token;
+
+    await runApiNode(
+      node: stubNode,
+      messages: [
+        <String, dynamic>{'role': 'user', 'content': prompt},
+      ],
+      settings: settings,
+      apiSettings: apiSettings,
+      cancelToken: token,
+      onChunk: (chunk) {
+        if (!mounted) return;
+        buffer.write(chunk);
+        _answerCtrl.text = buffer.toString().trim();
+      },
+      onComplete: (result, _) {
+        if (!mounted) return;
+        final text = result.trim();
+        if (text.isNotEmpty) {
+          _answerCtrl.text = text;
+          widget.entry.answer = text;
+        }
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _answerError = error);
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _answering = false;
+      _answerToken = null;
     });
   }
 
@@ -325,11 +390,38 @@ class _ThesisCardState extends State<ThesisCard> {
                   const InputDecoration(isDense: true, border: InputBorder.none),
             ),
             const Divider(height: 12),
-            const Text('Ответ',
-                style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w600)),
+            Row(children: [
+              const Text('Ответ',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600)),
+              const Spacer(),
+              if (_answering)
+                GestureDetector(
+                  onTap: () => _answerToken?.cancel(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
+                    ),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: _answerThesis,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.bolt, size: 16, color: Colors.grey[500]),
+                  ),
+                ),
+            ]),
+            if (_answerError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(_answerError!, style: const TextStyle(fontSize: 11, color: Colors.red)),
+              ),
             const SizedBox(height: 4),
             TextField(
               controller: _answerCtrl,

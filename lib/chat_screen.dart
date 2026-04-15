@@ -17,6 +17,7 @@ import 'models/thesis_entry.dart';
 import 'services/api_runner.dart';
 import 'services/dump_service.dart';
 import 'widgets/api_node_sheet.dart';
+import 'widgets/excerpt_extractor.dart';
 import 'widgets/thesis_workshop_screen.dart';
 
 // ── Emoji stripping ───────────────────────────────────────────────────────
@@ -446,9 +447,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _enterMarkup(Node node) {
-    widget.model.theses.add(ThesisEntry(sourceNodeId: node.id, excerpt: node.text));
-    widget.model.notifyThesesChanged();
     setState(() => _markupMode = true);
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ExcerptExtractor(
+        text: node.text,
+        onConfirm: (excerpts) {
+          for (final e in excerpts) {
+            widget.model.theses.add(
+              ThesisEntry(sourceNodeId: node.id, excerpt: e),
+            );
+          }
+          widget.model.notifyThesesChanged();
+        },
+      ),
+    ));
   }
 
   void _exitMarkup() => setState(() => _markupMode = false);

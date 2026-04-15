@@ -26,7 +26,10 @@ enum _Phase { idle, determining, selecting, scrolling }
 
 class ExcerptExtractor extends StatefulWidget {
   final String text;
-  const ExcerptExtractor({super.key, required this.text});
+  /// Если задан — показывается кнопка «Добавить в тезисы» вместо «Копировать всё».
+  /// Вызывается со списком выбранных отрывков при подтверждении.
+  final void Function(List<String> excerpts)? onConfirm;
+  const ExcerptExtractor({super.key, required this.text, this.onConfirm});
 
   @override
   State<ExcerptExtractor> createState() => _ExcerptExtractorState();
@@ -612,10 +615,19 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
                     Text('Выбранное',
                         style: Theme.of(context).textTheme.labelSmall),
                     const Spacer(),
-                    TextButton(
-                      onPressed: _copyAll,
-                      child: const Text('Копировать всё'),
-                    ),
+                    if (widget.onConfirm != null)
+                      TextButton(
+                        onPressed: () {
+                          widget.onConfirm!(List.of(_buffer));
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('В тезисы'),
+                      )
+                    else
+                      TextButton(
+                        onPressed: _copyAll,
+                        child: const Text('Копировать всё'),
+                      ),
                   ],
                 ),
                 Expanded(
