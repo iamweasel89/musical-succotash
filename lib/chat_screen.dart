@@ -184,33 +184,40 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickImages() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-      withData: true,
-      withReadStream: true, // Android 13 Photo Picker fallback via ContentResolver
-    );
-    if (result == null) return;
-    final added = <Attachment>[];
-    for (final file in result.files) {
-      final bytes = await _readPickedFileBytes(file);
-      if (bytes == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${file.name}: не удалось прочитать'),
-            duration: const Duration(seconds: 2),
-          ));
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true,
+      );
+      if (result == null) return;
+      final added = <Attachment>[];
+      for (final file in result.files) {
+        final bytes = await _readPickedFileBytes(file);
+        if (bytes == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('${file.name}: не удалось прочитать'),
+              duration: const Duration(seconds: 2),
+            ));
+          }
+          continue;
         }
-        continue;
+        added.add(Attachment(
+          filename: file.name,
+          mimeType: _imageMime(file.extension ?? ''),
+          base64Data: base64Encode(bytes),
+        ));
       }
-      added.add(Attachment(
-        filename: file.name,
-        mimeType: _imageMime(file.extension ?? ''),
-        base64Data: base64Encode(bytes),
+      if (added.isEmpty) return;
+      setState(() => _pendingAttachments.addAll(added));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Ошибка выбора изображения: $e'),
+        duration: const Duration(seconds: 4),
       ));
     }
-    if (added.isEmpty) return;
-    setState(() => _pendingAttachments.addAll(added));
   }
 
   /// Tries three methods to read bytes from a picked file, in order:
