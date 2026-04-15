@@ -681,6 +681,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (_markupMode && _theses.isNotEmpty)
                 _ThesisPanel(
                   theses: _theses,
+                  model: widget.model,
                   onRemove: (i) => setState(() => _theses.removeAt(i)),
                   onSave: () async {
                     final msgs = _buildMessages();
@@ -1315,9 +1316,15 @@ class _MarkupBanner extends StatelessWidget {
 
 class _ThesisPanel extends StatefulWidget {
   final List<_ThesisEntry> theses;
+  final AppModel model;
   final void Function(int) onRemove;
   final VoidCallback onSave;
-  const _ThesisPanel({required this.theses, required this.onRemove, required this.onSave});
+  const _ThesisPanel({
+    required this.theses,
+    required this.model,
+    required this.onRemove,
+    required this.onSave,
+  });
 
   @override
   State<_ThesisPanel> createState() => _ThesisPanelState();
@@ -1355,6 +1362,7 @@ class _ThesisPanelState extends State<_ThesisPanel> {
                 final t = widget.theses[i];
                 return _ThesisCard(
                   entry: t,
+                  model: widget.model,
                   onRemove: () => widget.onRemove(i),
                   onChanged: () => setState(() {}),
                 );
@@ -1380,9 +1388,15 @@ class _ThesisPanelState extends State<_ThesisPanel> {
 
 class _ThesisCard extends StatefulWidget {
   final _ThesisEntry entry;
+  final AppModel model;
   final VoidCallback onRemove;
   final VoidCallback onChanged;
-  const _ThesisCard({required this.entry, required this.onRemove, required this.onChanged});
+  const _ThesisCard({
+    required this.entry,
+    required this.model,
+    required this.onRemove,
+    required this.onChanged,
+  });
 
   @override
   State<_ThesisCard> createState() => _ThesisCardState();
@@ -1391,6 +1405,9 @@ class _ThesisCard extends StatefulWidget {
 class _ThesisCardState extends State<_ThesisCard> {
   late final TextEditingController _thesisCtrl;
   late final TextEditingController _answerCtrl;
+  CancelToken? _formulateToken;
+  bool _formulating = false;
+  String? _formulateError;
 
   @override
   void initState() {
@@ -1409,9 +1426,72 @@ class _ThesisCardState extends State<_ThesisCard> {
 
   @override
   void dispose() {
+    _formulateToken?.cancel();
     _thesisCtrl.dispose();
     _answerCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _formulateThesis() async {
+    if (_formulating) return;
+    final excerpt = widget.entry.excerpt.trim();
+    if (excerpt.isEmpty) return;
+
+    final settings = widget.model.settings;
+    final apiSettings = ApiNodeSettings(
+      provider: settings.defaultProvider,
+      model: settings.defaultModel,
+      maxTokens: settings.defaultMaxTokens,
+      temperature: settings.defaultTemperature,
+    );
+    // runApiNode requires a Node but does not read it internally; pass a stub.
+    final stubNode = Node(type: NodeType.api, position: const HexPos(0, 0));
+    final prompt =
+        'Сформулируй краткий тезис (одна-две фразы) на основе фрагмента ниже. '
+        'Верни только сам тезис — без вступлений, комментариев и маркеров списка.\n\n'
+        'Фрагмент:\n$excerpt';
+
+    setState(() {
+      _formulating = true;
+      _formulateError = null;
+    });
+
+    final buffer = StringBuffer();
+    final token = CancelToken();
+    _formulateToken = token;
+
+    await runApiNode(
+      node: stubNode,
+      messages: [
+        <String, dynamic>{'role': 'user', 'content': prompt},
+      ],
+      settings: settings,
+      apiSettings: apiSettings,
+      cancelToken: token,
+      onChunk: (chunk) {
+        if (!mounted) return;
+        buffer.write(chunk);
+        _thesisCtrl.text = buffer.toString().trim();
+      },
+      onComplete: (result, _) {
+        if (!mounted) return;
+        final text = result.trim();
+        if (text.isNotEmpty) {
+          _thesisCtrl.text = text;
+          widget.entry.thesis = text;
+        }
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _formulateError = error);
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _formulating = false;
+      _formulateToken = null;
+    });
   }
 
   @override
@@ -1427,8 +1507,44 @@ class _ThesisCardState extends State<_ThesisCard> {
             Row(children: [
               const Text('Тезис', style: TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w600)),
               const Spacer(),
+              if (_formulating)
+                GestureDetector(
+                  onTap: () => _formulateToken?.cancel(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: _formulateThesis,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.auto_awesome,
+                      size: 16,
+                      color: Colors.deepPurple[400],
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 8),
               GestureDetector(onTap: widget.onRemove, child: const Icon(Icons.close, size: 14, color: Colors.grey)),
             ]),
+            if (_formulateError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _formulateError!,
+                  style: const TextStyle(fontSize: 11, color: Colors.red),
+                ),
+              ),
             const SizedBox(height: 4),
             TextField(
               controller: _thesisCtrl,
