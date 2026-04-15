@@ -30,6 +30,7 @@ class _MainScreenState extends State<MainScreen> {
       context: context,
       isScrollControlled: true,
       builder: (_) => SettingsSheet(
+        model: widget.model,
         settings: widget.model.settings,
         onChanged: widget.model.notifySettingsChanged,
         onClearAll: widget.model.clearAll,
