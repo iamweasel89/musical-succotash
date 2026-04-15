@@ -99,6 +99,23 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   }
 
   int _lineIdxAt(double globalY) {
+    // First pass: check if Y falls within a paragraph's full visual span
+    // (first-word top → last-word bottom). Avoids misidentifying the paragraph
+    // when the finger is in the middle of a multi-line wrapped paragraph.
+    for (final line in _lines) {
+      if (line.words.isEmpty) continue;
+      final firstBox = line.words.first.key.currentContext
+          ?.findRenderObject() as RenderBox?;
+      final lastBox = line.words.last.key.currentContext
+          ?.findRenderObject() as RenderBox?;
+      if (firstBox == null || !firstBox.hasSize) continue;
+      if (lastBox == null || !lastBox.hasSize) continue;
+      final top = firstBox.localToGlobal(Offset.zero).dy - 4;
+      final bottom =
+          lastBox.localToGlobal(Offset.zero).dy + lastBox.size.height + 4;
+      if (globalY >= top && globalY <= bottom) return line.idx;
+    }
+    // Fallback: nearest paragraph center (handles gaps between paragraphs)
     int best = -1;
     double bestDist = double.infinity;
     for (final line in _lines) {
