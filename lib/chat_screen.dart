@@ -14,6 +14,7 @@ import 'models/hex_layout.dart';
 import 'models/hex_pos.dart';
 import 'models/node.dart';
 import 'services/api_runner.dart';
+import 'services/dump_service.dart';
 import 'widgets/api_node_sheet.dart';
 
 // ── Emoji stripping ───────────────────────────────────────────────────────
@@ -417,6 +418,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ── Bubble actions ────────────────────────────────────────────────────────
 
+  Future<void> _dumpBranch() async {
+    if (_chainPath.isEmpty) return;
+    final messages = _buildMessages();
+    if (messages.isEmpty) return;
+    try {
+      final file = await DumpService.saveDump(
+        messages: messages,
+        canvasName: widget.model.activeCanvas.name,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Дамп сохранён: ${file.path.split('/').last}'),
+        duration: const Duration(seconds: 3),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка дампа: $e')),
+      );
+    }
+  }
+
   void _copyNode(Node node) {
     final text = widget.model.settings.hideEmoji
         ? _stripEmoji(node.text)
@@ -787,6 +810,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           Row(
             children: [
+              IconButton(
+                icon: const Icon(Icons.download_for_offline_outlined),
+                tooltip: 'Сохранить дамп ветки',
+                onPressed: _chainPath.isEmpty ? null : _dumpBranch,
+              ),
               IconButton(
                 icon: Icon(
                   Icons.attach_file,
