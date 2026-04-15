@@ -334,7 +334,7 @@ class _SettingsSheetState extends State<SettingsSheet> {
               ],
             ),
             const Divider(height: 24),
-            const Text('Эксперимент',
+            const Text('Мастерская',
                 style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             ListTile(
