@@ -500,7 +500,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
 
   Widget _buildBuffer(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 160),
+      constraints: const BoxConstraints(maxHeight: 215),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
@@ -530,9 +530,7 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
                   _buffer.length,
                   (i) => InputChip(
                     label: Text(
-                      _buffer[i].length > 40
-                          ? '${_buffer[i].substring(0, 40)}…'
-                          : _buffer[i],
+                      _buffer[i],
                       style: const TextStyle(fontSize: 12),
                     ),
                     onDeleted: () => _removeChip(i),
