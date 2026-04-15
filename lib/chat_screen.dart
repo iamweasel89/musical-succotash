@@ -13,9 +13,11 @@ import 'models/edge.dart';
 import 'models/hex_layout.dart';
 import 'models/hex_pos.dart';
 import 'models/node.dart';
+import 'models/thesis_entry.dart';
 import 'services/api_runner.dart';
 import 'services/dump_service.dart';
 import 'widgets/api_node_sheet.dart';
+import 'widgets/thesis_workshop_screen.dart';
 
 // ── Emoji stripping ───────────────────────────────────────────────────────
 
@@ -47,7 +49,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Markup / thesis mode
   bool _markupMode = false;
-  final List<_ThesisEntry> _theses = [];
 
   // Collapse state
   // When _globalCollapse=true, _collapsedOverrides = explicitly expanded nodes.
@@ -445,16 +446,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _enterMarkup(Node node) {
-    setState(() {
-      _markupMode = true;
-      _theses.add(_ThesisEntry(sourceNodeId: node.id, excerpt: node.text));
-    });
+    widget.model.theses.add(ThesisEntry(sourceNodeId: node.id, excerpt: node.text));
+    widget.model.notifyThesesChanged();
+    setState(() => _markupMode = true);
   }
 
-  void _exitMarkup() => setState(() {
-        _markupMode = false;
-        _theses.clear();
-      });
+  void _exitMarkup() => setState(() => _markupMode = false);
 
   void _copyNode(Node node) {
     final text = widget.model.settings.hideEmoji
@@ -673,36 +670,14 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               if (_markupMode)
                 _MarkupBanner(
-                  count: _theses.length,
+                  count: widget.model.theses.length,
                   onExit: _exitMarkup,
+                  onOpen: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => ThesisWorkshopScreen(model: widget.model),
+                  )),
                 ),
               Expanded(child: _buildList()),
               if (_chainPath.isNotEmpty) _buildChatToolbar(),
-              if (_markupMode && _theses.isNotEmpty)
-                _ThesisPanel(
-                  theses: _theses,
-                  model: widget.model,
-                  onRemove: (i) => setState(() => _theses.removeAt(i)),
-                  onSave: () async {
-                    final msgs = _buildMessages();
-                    await DumpService.saveDump(
-                      messages: msgs,
-                      canvasName: widget.model.activeCanvas.name,
-                      theses: _theses.map((t) => ThesisDump(
-                        sourceNodeId: t.sourceNodeId,
-                        excerpt: t.excerpt,
-                        thesis: t.thesis,
-                        answer: t.answer,
-                      )).toList(),
-                    );
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Тезисы сохранены в inbox'),
-                      duration: Duration(seconds: 2),
-                    ));
-                    _exitMarkup();
-                  },
-                ),
               _buildInputBar(),
             ],
           );
@@ -1268,28 +1243,13 @@ class _HistorySheet extends StatelessWidget {
   }
 }
 
-// ── Thesis model ──────────────────────────────────────────────────────────────
-
-class _ThesisEntry {
-  final String sourceNodeId;
-  final String excerpt; // raw text from the node
-  String thesis;        // editable thesis text (initially same as excerpt preview)
-  String answer;
-
-  _ThesisEntry({
-    required this.sourceNodeId,
-    required this.excerpt,
-    String? thesis,
-    this.answer = '',
-  }) : thesis = thesis ?? (excerpt.length > 120 ? '${excerpt.substring(0, 120)}…' : excerpt);
-}
-
 // ── Markup banner ─────────────────────────────────────────────────────────────
 
 class _MarkupBanner extends StatelessWidget {
   final int count;
   final VoidCallback onExit;
-  const _MarkupBanner({required this.count, required this.onExit});
+  final VoidCallback onOpen;
+  const _MarkupBanner({required this.count, required this.onExit, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -1300,273 +1260,20 @@ class _MarkupBanner extends StatelessWidget {
         children: [
           const Icon(Icons.format_quote_outlined, size: 16, color: Colors.deepPurple),
           const SizedBox(width: 8),
-          Text('Режим тезисов · $count', style: const TextStyle(fontSize: 13, color: Colors.deepPurple)),
+          Text('Тезисы · $count', style: const TextStyle(fontSize: 13, color: Colors.deepPurple)),
           const Spacer(),
+          GestureDetector(
+            onTap: onOpen,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Text('Открыть →', style: TextStyle(fontSize: 13, color: Colors.deepPurple, fontWeight: FontWeight.w600)),
+            ),
+          ),
           GestureDetector(
             onTap: onExit,
             child: const Icon(Icons.close, size: 18, color: Colors.deepPurple),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Thesis panel ──────────────────────────────────────────────────────────────
-
-class _ThesisPanel extends StatefulWidget {
-  final List<_ThesisEntry> theses;
-  final AppModel model;
-  final void Function(int) onRemove;
-  final VoidCallback onSave;
-  const _ThesisPanel({
-    required this.theses,
-    required this.model,
-    required this.onRemove,
-    required this.onSave,
-  });
-
-  @override
-  State<_ThesisPanel> createState() => _ThesisPanelState();
-}
-
-class _ThesisPanelState extends State<_ThesisPanel> {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 280),
-      decoration: BoxDecoration(
-        color: Colors.deepPurple[50],
-        border: Border(top: BorderSide(color: Colors.deepPurple.shade100)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.deepPurple[200],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              shrinkWrap: true,
-              itemCount: widget.theses.length,
-              itemBuilder: (_, i) {
-                final t = widget.theses[i];
-                return _ThesisCard(
-                  entry: t,
-                  model: widget.model,
-                  onRemove: () => widget.onRemove(i),
-                  onChanged: () => setState(() {}),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
-                onPressed: widget.onSave,
-                child: const Text('Сохранить в inbox'),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ThesisCard extends StatefulWidget {
-  final _ThesisEntry entry;
-  final AppModel model;
-  final VoidCallback onRemove;
-  final VoidCallback onChanged;
-  const _ThesisCard({
-    required this.entry,
-    required this.model,
-    required this.onRemove,
-    required this.onChanged,
-  });
-
-  @override
-  State<_ThesisCard> createState() => _ThesisCardState();
-}
-
-class _ThesisCardState extends State<_ThesisCard> {
-  late final TextEditingController _thesisCtrl;
-  late final TextEditingController _answerCtrl;
-  CancelToken? _formulateToken;
-  bool _formulating = false;
-  String? _formulateError;
-
-  @override
-  void initState() {
-    super.initState();
-    _thesisCtrl = TextEditingController(text: widget.entry.thesis);
-    _answerCtrl = TextEditingController(text: widget.entry.answer);
-    _thesisCtrl.addListener(() {
-      widget.entry.thesis = _thesisCtrl.text;
-      widget.onChanged();
-    });
-    _answerCtrl.addListener(() {
-      widget.entry.answer = _answerCtrl.text;
-      widget.onChanged();
-    });
-  }
-
-  @override
-  void dispose() {
-    _formulateToken?.cancel();
-    _thesisCtrl.dispose();
-    _answerCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _formulateThesis() async {
-    if (_formulating) return;
-    final excerpt = widget.entry.excerpt.trim();
-    if (excerpt.isEmpty) return;
-
-    final settings = widget.model.settings;
-    final apiSettings = ApiNodeSettings(
-      provider: settings.defaultProvider,
-      model: settings.defaultModel,
-      maxTokens: settings.defaultMaxTokens,
-      temperature: settings.defaultTemperature,
-    );
-    // runApiNode requires a Node but does not read it internally; pass a stub.
-    final stubNode = Node(type: NodeType.api, position: const HexPos(0, 0));
-    final prompt =
-        'Сформулируй краткий тезис (одна-две фразы) на основе фрагмента ниже. '
-        'Верни только сам тезис — без вступлений, комментариев и маркеров списка.\n\n'
-        'Фрагмент:\n$excerpt';
-
-    setState(() {
-      _formulating = true;
-      _formulateError = null;
-    });
-
-    final buffer = StringBuffer();
-    final token = CancelToken();
-    _formulateToken = token;
-
-    await runApiNode(
-      node: stubNode,
-      messages: [
-        <String, dynamic>{'role': 'user', 'content': prompt},
-      ],
-      settings: settings,
-      apiSettings: apiSettings,
-      cancelToken: token,
-      onChunk: (chunk) {
-        if (!mounted) return;
-        buffer.write(chunk);
-        _thesisCtrl.text = buffer.toString().trim();
-      },
-      onComplete: (result, _) {
-        if (!mounted) return;
-        final text = result.trim();
-        if (text.isNotEmpty) {
-          _thesisCtrl.text = text;
-          widget.entry.thesis = text;
-        }
-      },
-      onError: (error) {
-        if (!mounted) return;
-        setState(() => _formulateError = error);
-      },
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _formulating = false;
-      _formulateToken = null;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Text('Тезис', style: TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              if (_formulating)
-                GestureDetector(
-                  onTap: () => _formulateToken?.cancel(),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.deepPurple,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: _formulateThesis,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      Icons.auto_awesome,
-                      size: 16,
-                      color: Colors.deepPurple[400],
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              GestureDetector(onTap: widget.onRemove, child: const Icon(Icons.close, size: 14, color: Colors.grey)),
-            ]),
-            if (_formulateError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  _formulateError!,
-                  style: const TextStyle(fontSize: 11, color: Colors.red),
-                ),
-              ),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _thesisCtrl,
-              maxLines: null,
-              style: const TextStyle(fontSize: 13),
-              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
-            ),
-            const Divider(height: 12),
-            const Text('Ответ', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            TextField(
-              controller: _answerCtrl,
-              maxLines: null,
-              style: const TextStyle(fontSize: 13),
-              decoration: const InputDecoration(
-                isDense: true,
-                hintText: 'Ваш ответ…',
-                border: InputBorder.none,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

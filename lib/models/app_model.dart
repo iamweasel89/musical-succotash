@@ -7,6 +7,7 @@ import 'canvas_data.dart';
 import 'edge.dart';
 import 'node.dart';
 import 'settings.dart';
+import 'thesis_entry.dart';
 
 // ── History entry ──────────────────────────────────────────────────────────
 
@@ -50,6 +51,10 @@ class AppModel extends ChangeNotifier {
   final List<Edge> edges = [];
   final List<String> chainPath = [];
   final GlobalSettings settings = GlobalSettings();
+
+  // ── Тезисы (эфемерные, не сохраняются) ───────────────────────────────────
+  final List<ThesisEntry> theses = [];
+  void notifyThesesChanged() => notifyListeners();
 
   // ── Canvases ───────────────────────────────────────────────────────────────
   final List<CanvasData> canvases = [];
