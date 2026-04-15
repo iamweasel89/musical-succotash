@@ -47,8 +47,10 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
   double _bufferHeight = 215;  // resizable buffer panel height
   bool _isFlinging = false;    // true while inertia scroll animation runs
 
-  // Buffer: list of committed text snippets
+  // Buffer: list of committed text snippets + parallel word-id sets for pink highlight
   final List<String> _buffer = [];
+  final List<Set<String>> _bufferWordIds = [];
+  Set<String> _committedIds = {}; // union of all _bufferWordIds, rebuilt on change
   // Diagnostic log (not shown in UI, only count + copy)
   final List<String> _log = [];
 
@@ -282,16 +284,30 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
     if (text.trim().isEmpty) return;
     setState(() {
       _buffer.add(text.trim());
+      _bufferWordIds.add(Set.from(effective));
+      _rebuildCommittedIds();
       _currentSelection = {};
     });
   }
 
-  void _undo() {
-    if (_buffer.isEmpty) return;
-    setState(() => _buffer.removeLast());
+  void _rebuildCommittedIds() {
+    _committedIds = _bufferWordIds.fold(<String>{}, (acc, s) => acc..addAll(s));
   }
 
-  void _removeChip(int i) => setState(() => _buffer.removeAt(i));
+  void _undo() {
+    if (_buffer.isEmpty) return;
+    setState(() {
+      _buffer.removeLast();
+      _bufferWordIds.removeLast();
+      _rebuildCommittedIds();
+    });
+  }
+
+  void _removeChip(int i) => setState(() {
+    _buffer.removeAt(i);
+    _bufferWordIds.removeAt(i);
+    _rebuildCommittedIds();
+  });
 
   Future<void> _copyAll() async {
     final text = _buffer.join('\n');
@@ -494,16 +510,21 @@ class _ExcerptExtractorState extends State<ExcerptExtractor> {
 
   Widget _buildWord(_Word word) {
     final sel = _currentSelection.contains(word.id);
+    final committed = !sel && _committedIds.contains(word.id);
     return Container(
       key: word.key,
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       decoration: sel
           ? BoxDecoration(
-              color:
-                  Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
               borderRadius: BorderRadius.circular(3),
             )
-          : null,
+          : committed
+              ? BoxDecoration(
+                  color: const Color(0xFFFFB6C1).withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(3),
+                )
+              : null,
       child: Text('${word.text} ',
           style: Theme.of(context).textTheme.bodyMedium),
     );
