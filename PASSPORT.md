@@ -9,9 +9,12 @@
 
 ## Что приложение делает
 
-Мобильный клиент с двумя режимами:
+Мобильный клиент. Навигация — два таба:
 - **Канва** — гексагональная сетка, ноды (текст/API), рёбра, мультиканвас
 - **Чат** — ветвящийся диалог с LLM, каждое сообщение = нода на канве
+
+Плюс **Мастерская** (вход из настроек) — экран-хаб с комнатами: извлечение отрывков, режим тезисов, дерево решений, инбокс.
+Поиск по нодам — из тулбара главного экрана.
 
 ---
 
@@ -60,25 +63,44 @@
 
 ```
 lib/
+  main.dart                      — entry point
+  main_screen.dart               — MainScreen (таб: чат / канва, иконки поиск / настройки)
+  chat_screen.dart               — ChatScreen, _ChatBubble
+  search_screen.dart             — SearchScreen (поиск по нодам, переход к цепочке)
   models/
-    app_model.dart       — AppModel (ChangeNotifier), canvases, nodes, edges
-    node.dart            — Node (createdAt, updatedAt, type, status, text)
-    canvas_data.dart     — CanvasData (createdAt, name, nodeIds, pan/zoom)
-    edge.dart            — Edge (fromId, toId, waypoints)
-    settings.dart        — GlobalSettings (API keys, toggles, showBubbleTime/Id)
+    app_model.dart               — AppModel (ChangeNotifier): canvases, nodes, edges, theses, decisions
+    node.dart                    — Node (createdAt, updatedAt, type, status, text)
+    canvas_data.dart             — CanvasData (createdAt, name, nodeIds, pan/zoom)
+    edge.dart                    — Edge (fromId, toId, waypoints)
+    settings.dart                — GlobalSettings (API keys, toggles, showBubbleTime/Id)
+    attachment.dart              — Attachment (image base64 / текстовый контент)
+    thesis_entry.dart            — ThesisEntry (sourceNodeId, excerpt, thesis, answer)
+    decision_entry.dart          — DecisionEntry (type, status, notes, parentId)
+    hex_pos.dart                 — HexPos (q, r)
+    hex_layout.dart              — axial hex: направления, соседи
   services/
-    api_runner.dart      — callLlm(), streaming, multi-provider
-    dump_service.dart    — DumpService.saveDump() → documents/inbox/*.md
+    api_runner.dart              — callLlm(), streaming, multi-provider
+    dump_service.dart            — DumpService.saveDump() → documents/inbox/*.md
+    logger.dart                  — AppLogger (ring-buffer in-memory log)
+    updater.dart                 — AppUpdater (проверка/скачивание/установка APK)
   canvas/
-    canvas_view.dart     — HexCanvas + switcher sheet
-    hex_painter.dart     — CustomPainter (grid, nodes, edges)
-    hex_math.dart        — hexToWorld, worldToHex
+    canvas_view.dart             — HexCanvas + switcher sheet
+    hex_canvas_screen.dart       — HexCanvasScreen (chainMode, deleteMode, chain panel)
+    hex_painter.dart             — CustomPainter (grid, nodes, edges)
+    hex_math.dart                — hexToWorld, worldToHex
   widgets/
-    excerpt_extractor.dart  — свайп-выделение слов, буфер, инерция
-    settings_sheet.dart     — настройки (bottom sheet)
-    api_node_sheet.dart     — настройки API-ноды
-  chat_screen.dart       — ChatScreen, _ChatBubble, _ThesisEntry, _ThesisPanel
-  main_screen.dart       — MainScreen (таб: чат / канва)
+    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс
+    thesis_workshop_screen.dart  — режим тезисов (Я1–Я8)
+    decision_tree_screen.dart    — дерево решений (Т1–Т5)
+    inbox_screen.dart            — просмотр documents/inbox/ (О2)
+    excerpt_extractor.dart       — свайп-выделение слов, буфер, инерция
+    settings_sheet.dart          — настройки (bottom sheet); вход в Мастерскую
+    api_node_sheet.dart          — настройки API-ноды
+    text_node_sheet.dart         — редактор текстовой ноды + вложения
+    node_panel.dart              — панель ноды (editor + received slot)
+    node_type_picker.dart        — выбор типа ноды
+    node_popup.dart              — заглушка
+    log_sheet.dart               — просмотр AppLogger
 ```
 
 ---
@@ -90,7 +112,13 @@ lib/
 | ExcerptExtractor — свайп-выделение, буфер, инерция, розовый фон | готово |
 | Параграфный hysteresis в экстракторе (Э2) | готово |
 | DumpService — дамп ветки в documents/inbox/ | готово |
-| Режим тезисов — кнопка на пузыре, панель карточек, сохранение | черновик |
+| Мастерская — экран-хаб, 4 комнаты (отрывки/тезисы/дерево/инбокс) | готово |
+| Режим тезисов — карточки, формулировка, ответ (Я1, Я2, Я5, Я7) | готово |
+| Дерево решений — экран в Мастерской, экспорт md (Т1, Т2, Т4) | готово |
+| Инбокс-экран — просмотр documents/inbox/ (О2) | готово |
+| Поиск по нодам — SearchScreen, переход к цепочке | готово |
+| Автообновление APK — AppUpdater | готово |
+| Логгер + LogSheet | готово |
 | CanvasData.createdAt | готово |
 | Время + short ID на пузыре (опционально) | готово |
 | Имя канваса + счётчик сообщений в тулбаре чата | готово |
