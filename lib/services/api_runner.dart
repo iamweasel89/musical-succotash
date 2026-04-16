@@ -140,9 +140,11 @@ String _effectiveSystemPrompt(GlobalSettings s) {
   final parts = <String>[];
   if (s.useBuiltinSystemPrompt) {
     final d = DateTime.now();
-    final date =
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    parts.add('Today is $date. $_builtinPromptBody');
+    const weekdays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    final dayName = weekdays[d.weekday - 1];
+    final date = '$dayName, ${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+    final time = '${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')} local time';
+    parts.add('Today is $date, $time. $_builtinPromptBody');
   }
   if (s.defaultSystemPrompt.isNotEmpty) {
     parts.add(s.defaultSystemPrompt);
