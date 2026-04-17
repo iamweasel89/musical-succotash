@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import 'chat/helpers/bubble_time.dart';
+import 'chat/helpers/emoji.dart';
 import 'models/app_model.dart';
 import 'models/attachment.dart';
 import 'models/edge.dart';
@@ -22,18 +24,6 @@ import 'widgets/api_node_sheet.dart';
 import 'widgets/shared/compress_sheet.dart';
 import 'widgets/excerpt_extractor.dart';
 import 'widgets/thesis_workshop_screen.dart';
-
-// ── Emoji stripping ───────────────────────────────────────────────────────
-
-bool _isEmojiCodePoint(int r) =>
-    (r >= 0x1F000 && r <= 0x1FFFF) || // All emoji in Plane 1
-    (r >= 0x2600 && r <= 0x27BF) || // Misc symbols, dingbats
-    (r >= 0xFE00 && r <= 0xFE0F) || // Variation selectors
-    r == 0x200D || // ZWJ
-    r == 0x20E3; // Combining enclosing keycap
-
-String _stripEmoji(String s) =>
-    String.fromCharCodes(s.runes.where((r) => !_isEmojiCodePoint(r)));
 
 class ChatScreen extends StatefulWidget {
   final AppModel model;
@@ -633,7 +623,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _copyNode(Node node) {
     final text = widget.model.settings.hideEmoji
-        ? _stripEmoji(node.text)
+        ? stripEmoji(node.text)
         : node.text;
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1138,7 +1128,7 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = node.type == NodeType.text;
     final displayText =
-        hideEmoji ? _stripEmoji(node.text) : node.text;
+        hideEmoji ? stripEmoji(node.text) : node.text;
 
     Widget content;
     if (!isUser) {
@@ -1244,7 +1234,7 @@ class _ChatBubble extends StatelessWidget {
                   children: [
                     if (showTime)
                       Text(
-                        _formatBubbleTime(node.createdAt),
+                        formatBubbleTime(node.createdAt),
                         style: TextStyle(fontSize: 10, color: Colors.grey[500]),
                       ),
                     if (showTime && showId)
@@ -1274,23 +1264,6 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-String _formatBubbleTime(DateTime dt) {
-  final now = DateTime.now();
-  final diff = now.difference(dt);
-
-  // ВР7 — возраст для свежих, абсолют для старых.
-  if (diff.inSeconds < 30) return 'только что';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} мин';
-  if (diff.inHours < 24) return '${diff.inHours} ч';
-  if (diff.inDays < 7) return '${diff.inDays} дн';
-
-  final h = dt.hour.toString().padLeft(2, '0');
-  final m = dt.minute.toString().padLeft(2, '0');
-  if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
-    return '$h:$m';
-  }
-  return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')} $h:$m';
-}
 
 class _ActionRow extends StatelessWidget {
   final VoidCallback onCopy;
