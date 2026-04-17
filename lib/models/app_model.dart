@@ -349,35 +349,41 @@ class AppModel extends ChangeNotifier {
     } catch (_) {}
   }
 
-  void save() {
+  Future<void> save() async {
     // Sync current chainPath to active canvas before saving
     if (canvases.isNotEmpty) {
       activeCanvas.chainPath
         ..clear()
         ..addAll(chainPath);
     }
-    _box.put('nodes', jsonEncode(nodes.map((n) => n.toJson()).toList()));
-    _box.put('edges', jsonEncode(edges.map((e) => e.toJson()).toList()));
-    _box.put('chainPath', jsonEncode(chainPath));
-    _box.put(
-        'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
-    _box.put('activeCanvasId', _activeCanvasId);
-    _box.put('settings', jsonEncode(settings.toJson()));
-    _box.put('theses', jsonEncode(theses.map((t) => t.toJson()).toList()));
-    _box.put('decisions', jsonEncode(decisions.map((d) => d.toJson()).toList()));
-    _box.put('webSearchMessages',
-        jsonEncode(webSearchMessages.map((m) => m.toJson()).toList()));
-    _box.put('webSearchConfig', jsonEncode(webSearchConfig.toJson()));
+    // Box may be closed during test teardown — swallow errors so they don't
+    // escape to the zone and fail unrelated tests.
+    try {
+      await _box.put('nodes', jsonEncode(nodes.map((n) => n.toJson()).toList()));
+      await _box.put('edges', jsonEncode(edges.map((e) => e.toJson()).toList()));
+      await _box.put('chainPath', jsonEncode(chainPath));
+      await _box.put(
+          'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
+      await _box.put('activeCanvasId', _activeCanvasId);
+      await _box.put('settings', jsonEncode(settings.toJson()));
+      await _box.put('theses', jsonEncode(theses.map((t) => t.toJson()).toList()));
+      await _box.put('decisions', jsonEncode(decisions.map((d) => d.toJson()).toList()));
+      await _box.put('webSearchMessages',
+          jsonEncode(webSearchMessages.map((m) => m.toJson()).toList()));
+      await _box.put('webSearchConfig', jsonEncode(webSearchConfig.toJson()));
+    } catch (_) {}
   }
 
   /// Save pan/zoom without triggering a full rebuild.
-  void saveCanvasPanZoom(double panX, double panY, double zoom) {
+  Future<void> saveCanvasPanZoom(double panX, double panY, double zoom) async {
     activeCanvas
       ..panX = panX
       ..panY = panY
       ..zoom = zoom;
-    _box.put(
-        'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
+    try {
+      await _box.put(
+          'canvases', jsonEncode(canvases.map((c) => c.toJson()).toList()));
+    } catch (_) {}
   }
 
   // ── Canvas management ──────────────────────────────────────────────────────
@@ -494,14 +500,16 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _saveHistory() {
-    _box.put(
-      'history',
-      jsonEncode({
-        'u': _undoStack.map((e) => e.toJson()).toList(),
-        'r': _redoStack.map((e) => e.toJson()).toList(),
-      }),
-    );
+  Future<void> _saveHistory() async {
+    try {
+      await _box.put(
+        'history',
+        jsonEncode({
+          'u': _undoStack.map((e) => e.toJson()).toList(),
+          'r': _redoStack.map((e) => e.toJson()).toList(),
+        }),
+      );
+    } catch (_) {}
   }
 
   void _loadHistory() {
