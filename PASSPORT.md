@@ -26,8 +26,10 @@
 - Краткость по умолчанию. Подробности — по запросу.
 
 ### Маркировка ответов
-Каждый ответ AI начинается с номера: **1**, **2**...
-Секции внутри: **12а**, **12б**. Оператор ссылается: "re: 12б".
+Каждый ответ AI начинается с номера в **bold**: **1**, **2**...
+Нумерация сквозная в пределах сессии; новая сессия — с **1**.
+Секции внутри ответа: **12а**, **12б**. Оператор ссылается: «re: 12б» — однозначно указывает на ответ и раздел.
+При просьбе промаркировать задним числом — AI выписывает последние N ответов с присвоением номеров.
 
 ### Маркировка задач
 Задачи кодируются буквой группы + номером: Г1, Я2, Э3.
@@ -152,10 +154,10 @@ lib/
 ## Срочные задачи (раскрыть при обращении)
 
 **ПТ — Преобразование текста** *(общий слой LLM-трансформаций: ядро для Я / БК3 / агента)*
-- *ПТ1 ядро `services/llm_transform.dart` — функция `llmTransform(text, instruction, {maxLines, maxTokens, temperature})` → Future<String>. Выбор provider/model из `settings.defaultProvider/defaultModel` или override в вызове.
-- ПТ2 пресеты — `compress(text, N)` / `tldr(text)` / `translate(text, lang)` / `rewriteFormal(text)` / `outline(text)`
-- ПТ3 long-press на пузыре/ноде → меню пресетов → превью → применить (заменить / скопировать / создать новую ноду)
-- ПТ4 агентский tool `llm_transform(instruction, text)` — LLM-агент сжимает длинные результаты extract/crawl перед вставкой в контекст
+- ПТ1 ✓ ядро `services/llm_transform.dart` — функция `llmTransform(text, instruction, {maxTokens, temperature})`; поддерживает anthropic/openai/deepseek; выбор provider/model из `settings.defaultProvider/defaultModel` или override
+- ПТ2 ✓ пресеты — `compress(text, N)` / `tldr(text)` / `translate(text, lang)` / `rewriteFormal(text)` / `outline(text)`
+- ПТ3 частично — long-press на сообщении веб-поиска → «Сжать…» → чипы 1/3/5/10 → превью → копирование. Расширить на чат-пузыри, text-node-sheet, thesis-cards — отдельной задачей
+- ПТ4 ✓ агентский tool `llm_transform(instruction, text)` — агент может сжимать длинные результаты extract/crawl
 - ПТ5 миграция тезисов на пресеты — `thesisFormulate(excerpt)` и `thesisAnswer(thesis)` становятся тонкими обёртками над ПТ ядром
 - ПТ6 пользовательские пресеты — оператор добавляет свои инструкции в настройках (плейсхолдер `{text}`, опц. `{N}`)
 - ПТ7 интеграция с БК3 — mini-summary при «вбок» использует `compress(thread_text, 3)`

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/settings.dart';
+import 'llm_transform.dart';
 import 'web_search.dart';
 
 // Агентский цикл с поддержкой инструментов: web_search, web_extract, web_crawl.
@@ -85,6 +86,41 @@ final Map<String, _ToolDef> _tools = {
         return 'Extract failed: ${e.message}';
       } catch (e) {
         return 'Extract error: $e';
+      }
+    },
+  ),
+  'llm_transform': _ToolDef(
+    'Transform text by an instruction using an LLM. Use to compress long '
+        'text, translate, rewrite, outline, or otherwise restructure content '
+        'before including it in your reasoning.',
+    {
+      'type': 'object',
+      'properties': {
+        'text': {'type': 'string', 'description': 'Text to transform'},
+        'instruction': {
+          'type': 'string',
+          'description':
+              'What to do with the text (e.g., "compress to 3 lines", '
+                  '"translate to English", "outline as markdown")',
+        },
+      },
+      'required': ['text', 'instruction'],
+    },
+    (args, s, log) async {
+      final text = (args['text'] as String?) ?? '';
+      final instruction = (args['instruction'] as String?) ?? '';
+      if (text.trim().isEmpty || instruction.trim().isEmpty) {
+        return 'Empty text or instruction.';
+      }
+      log?.call('✎ llm_transform: $instruction');
+      try {
+        return await llmTransform(
+          text: text,
+          instruction: instruction,
+          settings: s,
+        );
+      } catch (e) {
+        return 'Transform failed: $e';
       }
     },
   ),
