@@ -240,7 +240,12 @@ lib/
 - ВИ3 ✓ встроенная кнопка «показать AI что я вижу» — тулбар MainScreen, `Icons.ios_share`
 - ВИ4 ✓ архитектура решена: гибрид (pull через Funnel + push tap-to-share). Continuous observe / авто-события — отложены в дальний угол (фаза 2)
 - ВИ5  аудит того что AI реально видит (без API-ключей, без приватного текста если флаг)
-- ВИ6  change-detect режим для скриншотов (сервер уведомляет о смене кадра, игнорируя курсор) — обсуждали для ПК, запишем на потом
+- ВИ6  change-detect режим для скриншотов ПК (сервер копит hash'и, я poll-ю /status):
+  - ВИ6.1  фоновая петля hashing в PC-сервере (дефолт 2 сек, интервал в env-var)
+  - ВИ6.2  endpoints /status (hash+ts) и /changes?since=<hash>
+  - ВИ6.3  perceptual hash (pHash) вместо SHA — игнорировать шум, анимации часов
+  - ВИ6.4  thumbnail 320px перед hash — экономия CPU/памяти
+  - ВИ6.5  (альт.) Windows Desktop Duplication API вместо polling — zero-CPU, wakes on frame change; делать только если polling окажется дорого
 - ВИ7  фаза 2 *(дальний угол)* — автоматический push по событиям (crash, новое сообщение и т.п.) через gateway (Cloudflare Worker или аналог). Делать когда tap-to-share накопит статистику какие события реально нужны.
 
 **ОТ — Отладочный API**
