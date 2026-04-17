@@ -357,7 +357,7 @@ lib/
 **Р — Рефакторинг** *(техдолг; ретроспектива 2026-04-17 — кодовая база начинает обрастать god-файлами)*
 - Р1 расщепить `chat_screen.dart` (1367 строк) — выделить `chat/bubble.dart`, `chat/action_row.dart`, `chat/messages_builder.dart`, `chat/attachments.dart`
 - Р2 единый LLM-клиент — вынести HTTP-часть из `api_runner` / `agent_runner` / `llm_transform` в `services/llm_client.dart` с интерфейсом `call(messages, {tools, stream}) → Stream<Event>`; сейчас 3×3 дубль (три вызывающих × три провайдера)
-- Р3 расщепить `settings_sheet.dart` (860 строк) по секциям — `settings/api_keys_section.dart`, `settings/components_section.dart`, `settings/chat_section.dart` и т.п.
+- Р3 ✓ `settings_sheet.dart` расщеплён (860 → 582): создан `widgets/settings/` с `switch_row`, `default_llm_section`, `chat_display_section`, `data_section`, `usage_section`. Осталось вынести ApiKeysSheet + UpdateSection отдельным проходом.
 - Р4 sub-managers под AppModel — `ThesisManager`, `DecisionManager`, `WebSearchManager` в `models/managers/`; AppModel становится агрегатором
 - Р5 базовые тесты — happy-path по критическим сервисам (`llm_transform`, `agent_runner`, `web_search`); сейчас один `app_model_test.dart`
 - Р6 ✓ seed-данные Decision tree вынесены в `assets/seed/decisions.json`; `app_model.dart` сократился с 710 до 640 строк
