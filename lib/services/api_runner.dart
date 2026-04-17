@@ -7,6 +7,7 @@ import '../models/attachment.dart';
 import '../models/node.dart';
 import '../models/settings.dart';
 import '../widgets/api_node_sheet.dart';
+import 'session_tracker.dart';
 
 // ── Cancel token ────────────────────────────────────────────────────────────
 
@@ -139,17 +140,57 @@ const _builtinPromptBody =
 String _effectiveSystemPrompt(GlobalSettings s) {
   final parts = <String>[];
   if (s.useBuiltinSystemPrompt) {
-    final d = DateTime.now();
-    const weekdays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    final dayName = weekdays[d.weekday - 1];
-    final date = '$dayName, ${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
-    final time = '${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')} local time';
-    parts.add('Today is $date, $time. $_builtinPromptBody');
+    parts.add('${_timeContext()}$_builtinPromptBody');
   }
   if (s.defaultSystemPrompt.isNotEmpty) {
     parts.add(s.defaultSystemPrompt);
   }
   return parts.join('\n\n');
+}
+
+String _timeContext() {
+  final d = DateTime.now();
+  const weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+    'Friday', 'Saturday', 'Sunday'
+  ];
+  final dayName = weekdays[d.weekday - 1];
+  final date =
+      '$dayName, ${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  final time =
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} local time';
+
+  // Part of day
+  String partOfDay;
+  final h = d.hour;
+  if (h < 6) {
+    partOfDay = 'night';
+  } else if (h < 12) {
+    partOfDay = 'morning';
+  } else if (h < 18) {
+    partOfDay = 'afternoon';
+  } else if (h < 23) {
+    partOfDay = 'evening';
+  } else {
+    partOfDay = 'night';
+  }
+
+  final isWeekend = d.weekday >= 6; // Sat/Sun
+  final dayKind = isWeekend ? 'weekend' : 'workday';
+
+  // Session duration
+  final sess = SessionTracker.elapsed;
+  final sessMin = sess.inMinutes;
+  final sessStr = sessMin < 1
+      ? 'just started'
+      : '$sessMin min running';
+
+  return 'Today is $date, $time. '
+      'It is $partOfDay on a $dayKind. '
+      'The hex-canvas session started at '
+      '${SessionTracker.startedAt.hour.toString().padLeft(2, '0')}:'
+      '${SessionTracker.startedAt.minute.toString().padLeft(2, '0')} '
+      '($sessStr). ';
 }
 
 String _keyFor(String provider, GlobalSettings s) {

@@ -4,11 +4,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'main_screen.dart';
 import 'models/app_model.dart';
 import 'services/debug_server.dart';
+import 'services/session_tracker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await Hive.openBox<String>('state');
+  SessionTracker.init();
   final model = AppModel()..load();
   if (model.settings.debugServerEnabled) {
     // Fire-and-forget; errors are logged inside DebugServer.

@@ -113,22 +113,38 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> _buildMessages({int upTo = -1}) {
     final end = upTo < 0 ? _chainPath.length : upTo + 1;
     final messages = <Map<String, dynamic>>[];
+    final now = DateTime.now();
     for (int i = 0; i < end; i++) {
       final n = widget.model.nodeById(_chainPath[i]);
       if (n == null) continue;
       if (n.text.isEmpty && n.attachments.isEmpty) continue;
       final role = n.type == NodeType.text ? 'user' : 'assistant';
+      // ВР8 — подшиваем временной префикс к каждому сообщению для LLM,
+      // чтобы модель видела хронологию, а не только плоский список.
+      final stamp = _relativeStamp(n.createdAt, now);
+      final stamped = '[$stamp] ${n.text}';
       if (n.attachments.isEmpty) {
-        messages.add({'role': role, 'content': n.text});
+        messages.add({'role': role, 'content': stamped});
       } else {
         messages.add({
           'role': role,
-          'content': n.text,
+          'content': stamped,
           '_attachments': n.attachments,
         });
       }
     }
     return messages;
+  }
+
+  static String _relativeStamp(DateTime t, DateTime now) {
+    final diff = now.difference(t);
+    if (diff.inSeconds < 30) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} h ago';
+    if (diff.inDays < 7) return '${diff.inDays} d ago';
+    // Absolute for older
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 
   String _buildInputPreview(int chainIndex) =>
@@ -1128,6 +1144,14 @@ class _ChatBubble extends StatelessWidget {
 
 String _formatBubbleTime(DateTime dt) {
   final now = DateTime.now();
+  final diff = now.difference(dt);
+
+  // ВР7 — возраст для свежих, абсолют для старых.
+  if (diff.inSeconds < 30) return 'только что';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} мин';
+  if (diff.inHours < 24) return '${diff.inHours} ч';
+  if (diff.inDays < 7) return '${diff.inDays} дн';
+
   final h = dt.hour.toString().padLeft(2, '0');
   final m = dt.minute.toString().padLeft(2, '0');
   if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
