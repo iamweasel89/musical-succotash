@@ -362,6 +362,7 @@ lib/
 - Р5 ✓ базовые тесты моделей — Reminder / WebSearchMessage / WebSearchConfig / GlobalSettings round-trip; AppModel reminders CRUD + Hive save/load. LLM-сервисы (web_search, agent_runner, llm_transform) не покрыты — нужны HTTP-моки, отложено Р5.1.
 - Р6 ✓ seed-данные Decision tree вынесены в `assets/seed/decisions.json`; `app_model.dart` сократился с 710 до 640 строк
 - Р7 ✓ каталог `lib/widgets/shared/` создан; compress_sheet переехал туда, 4 импорта обновлены. Конвенция: когда виджет нужен в 2+ местах — сразу в shared/.
+- Р8 *(horizon)* реархитектура — Repository-слой между UI и данными, выбор state management (Riverpod/BLoC/…), feature-based структура, DI. Делать когда упрёмся в ограничения при большой фиче (БК1/2, ПМ1, ЛЧ1). Не гигиена, а архитектурный скачок — 2–4 недели focused-работы.
 
 **Ш — Защита системы** *(обсудить перед внедрением)*
 - Ш1  пин/биометрия при запуске
