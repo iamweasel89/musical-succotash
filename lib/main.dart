@@ -12,7 +12,8 @@ void main() async {
   await Hive.initFlutter();
   await Hive.openBox<String>('state');
   SessionTracker.init();
-  final model = AppModel()..load();
+  final model = AppModel();
+  await model.load();
   // Fire-and-forget — errors logged internally.
   ReminderService.init();
   if (model.settings.debugServerEnabled) {

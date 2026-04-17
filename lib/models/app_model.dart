@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'canvas_data.dart';
@@ -76,121 +77,34 @@ class AppModel extends ChangeNotifier {
   final List<Reminder> reminders = [];
   void notifyRemindersChanged() { save(); notifyListeners(); }
 
-  void _seedDecisions() {
-    // Фиксированные ID чтобы дерево было воспроизводимым
-    const p = 'seed_platform';
-    const a = 'seed_arch';
-    const t = 'seed_terms';
-    const d = 'seed_design';
-    const f = 'seed_future';
-
-    final now = DateTime(2025, 4, 15);
-    decisions.addAll([
-      // ── Корневые ───────────────────────────────────────────────────────────
-      DecisionEntry(id: p, title: 'Платформа и стек',
-          type: DecisionType.technology, status: DecisionStatus.implemented,
-          notes: 'Flutter (Android), Hive, GitHub Actions', createdAt: now),
-      DecisionEntry(id: a, title: 'Архитектура приложения',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'Два режима: Чат и Канва. Единое состояние в AppModel.', createdAt: now),
-      DecisionEntry(id: t, title: 'Термины проекта',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Устоявшийся словарь — нода, тезис, дамп, инбокс, паспорт, мастерская.', createdAt: now),
-      DecisionEntry(id: d, title: 'Дизайн-решения',
-          type: DecisionType.design, status: DecisionStatus.implemented,
-          notes: 'Ключевые UX-решения по интерфейсу.', createdAt: now),
-      DecisionEntry(id: f, title: 'Идеи и горизонт',
-          type: DecisionType.architecture, status: DecisionStatus.idea,
-          notes: 'Направления которые обсуждаем но ещё не решили.', createdAt: now),
-
-      // ── Платформа ──────────────────────────────────────────────────────────
-      DecisionEntry(parentId: p, title: 'Flutter + Android',
-          type: DecisionType.technology, status: DecisionStatus.implemented,
-          notes: 'Единственная целевая платформа на данный момент.', createdAt: now),
-      DecisionEntry(parentId: p, title: 'Hive как локальное хранилище',
-          type: DecisionType.technology, status: DecisionStatus.implemented,
-          notes: 'Вместо SQLite или файлов. Box<String> с JSON-сериализацией.', createdAt: now),
-      DecisionEntry(parentId: p, title: 'GitHub Actions для сборки APK',
-          type: DecisionType.technology, status: DecisionStatus.accepted,
-          notes: 'CI/CD на GitHub. Замена не планируется — Android SDK уже настроен.', createdAt: now),
-      DecisionEntry(parentId: p, title: 'flutter_markdown для пузырей',
-          type: DecisionType.technology, status: DecisionStatus.implemented,
-          notes: 'Markdown-рендеринг в сообщениях чата.', createdAt: now),
-
-      // ── Архитектура ────────────────────────────────────────────────────────
-      DecisionEntry(parentId: a, title: 'AppModel — единое состояние (ChangeNotifier)',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'Один объект на всё приложение. Подписка через ListenableBuilder.', createdAt: now),
-      DecisionEntry(parentId: a, title: 'Каждое сообщение чата = нода на канве',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'Чат и канва — два представления одного графа нод.', createdAt: now),
-      DecisionEntry(parentId: a, title: 'Тезисы персистентны в Hive',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'Сначала были эфемерными. Переведены в Hive чтобы выживать перезапуск.', createdAt: now),
-      DecisionEntry(parentId: a, title: 'Мастерская как отдельный навигационный экран',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'Комнаты: Экстрактор, Тезисы, Дерево решений. Вход через настройки.', createdAt: now),
-      DecisionEntry(parentId: a, title: 'Инбокс = documents/inbox/ (markdown-файлы)',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'DumpService пишет *.md с YAML-фронтматтером. Для LLM-разбора позже.', createdAt: now),
-      DecisionEntry(id: 'seed_inbox_o2', parentId: a, title: 'Просмотр инбокса внутри приложения (О2)',
-          type: DecisionType.design, status: DecisionStatus.implemented,
-          notes: 'Комната в Мастерской. Список *.md файлов, сортировка новые сначала. Тап — markdown-просмотр. Удаление с подтверждением.', createdAt: now),
-      DecisionEntry(parentId: a, title: 'ExcerptExtractor с onConfirm для переиспользования',
-          type: DecisionType.architecture, status: DecisionStatus.implemented,
-          notes: 'Один виджет — два режима: standalone (копировать) и встроенный (в тезисы).', createdAt: now),
-
-      // ── Термины ────────────────────────────────────────────────────────────
-      DecisionEntry(parentId: t, title: 'Тезис',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Краткая формулировка мысли из фрагмента текста. Не цитата — интерпретация.', createdAt: now),
-      DecisionEntry(parentId: t, title: 'Нода',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Единица информации на канве. Бывает текстовой и API-типа.', createdAt: now),
-      DecisionEntry(parentId: t, title: 'Дамп',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Сохранённая ветка чата в markdown. Попадает в инбокс.', createdAt: now),
-      DecisionEntry(parentId: t, title: 'Инбокс',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Папка documents/inbox/ — накопитель черновиков для последующего разбора.', createdAt: now),
-      DecisionEntry(parentId: t, title: 'Паспорт',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Канонический статус документа. Не имя шага, а уровень зрелости.', createdAt: now),
-      DecisionEntry(parentId: t, title: 'Три уровня документа',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Черновик (сырая запись) → Документ (синтез) → Паспорт (канонический).', createdAt: now),
-      DecisionEntry(parentId: t, title: 'Мастерская',
-          type: DecisionType.term, status: DecisionStatus.accepted,
-          notes: 'Экран для инструментов и экспериментов. Не чат, не канва.', createdAt: now),
-
-      // ── Дизайн ─────────────────────────────────────────────────────────────
-      DecisionEntry(parentId: d, title: 'Два таба: Чат / Канва',
-          type: DecisionType.design, status: DecisionStatus.implemented,
-          notes: 'Нижняя навигация. Мастерская — через настройки, не таб.', createdAt: now),
-      DecisionEntry(parentId: d, title: 'Время и ID на пузыре — опционально',
-          type: DecisionType.design, status: DecisionStatus.implemented,
-          notes: 'Флаги showBubbleTime / showBubbleId в GlobalSettings. По умолчанию выкл.', createdAt: now),
-      DecisionEntry(parentId: d, title: 'Ветвящийся диалог — дерево, не список',
-          type: DecisionType.design, status: DecisionStatus.implemented,
-          notes: 'Каждый ответ можно ветвить. История = путь по дереву нод.', createdAt: now),
-      DecisionEntry(parentId: d, title: 'Баннер тезисов в чате → переход в Мастерскую',
-          type: DecisionType.design, status: DecisionStatus.implemented,
-          notes: 'Кнопка ❝ на пузыре → ExcerptExtractor → «В тезисы» → воркшоп. Не оверлей.', createdAt: now),
-
-      // ── Горизонт ───────────────────────────────────────────────────────────
-      DecisionEntry(parentId: f, title: 'М2 — Мастерская как среда разработки',
-          type: DecisionType.architecture, status: DecisionStatus.idea,
-          notes: 'Claude Code внутри приложения. AI видит граф канваса. Оператор и AI на одном экране.', createdAt: now),
-      DecisionEntry(parentId: f, title: 'Канва как порождающая структура',
-          type: DecisionType.architecture, status: DecisionStatus.discussion,
-          notes: 'Не отображение чата, а его источник. Чат — частный случай линейного пути по графу.', createdAt: now),
-      DecisionEntry(parentId: f, title: 'Своя хостинг-инфраструктура',
-          type: DecisionType.technology, status: DecisionStatus.rejected,
-          notes: 'Отказались. GitHub Actions уже настроен, Android Studio локально нежелателен.', createdAt: now),
-      DecisionEntry(parentId: f, title: 'Коллапс цепочки нод в одну группу-ноду',
-          type: DecisionType.design, status: DecisionStatus.idea,
-          notes: 'Длинные ветки на канве сжимаются в одну «группу-ноду». Раскрывается тапом. Отдельный визуальный стиль.', createdAt: now),
-    ]);
+  Future<void> _seedDecisions() async {
+    try {
+      final raw = await rootBundle.loadString('assets/seed/decisions.json');
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final createdAt = DateTime.parse(data['createdAt'] as String);
+      final entries = (data['entries'] as List).cast<Map<String, dynamic>>();
+      for (final e in entries) {
+        decisions.add(DecisionEntry(
+          id: e['id'] as String?,
+          parentId: e['parentId'] as String?,
+          title: e['title'] as String,
+          type: DecisionType.values.firstWhere(
+            (v) => v.name == e['type'],
+            orElse: () => DecisionType.architecture,
+          ),
+          status: DecisionStatus.values.firstWhere(
+            (v) => v.name == e['status'],
+            orElse: () => DecisionStatus.idea,
+          ),
+          notes: (e['notes'] as String?) ?? '',
+          createdAt: createdAt,
+        ));
+      }
+    } catch (err) {
+      // Asset не доступен — оставляем дерево пустым. Не ломаем запуск.
+      // ignore: avoid_print
+      print('seed decisions failed: $err');
+    }
   }
 
   // Добавляет новые seed-записи к уже существующему дереву (по фиксированному ID).
@@ -261,7 +175,7 @@ class AppModel extends ChangeNotifier {
   Box<String> get _box => Hive.box<String>('state');
 
   // ── Persistence ────────────────────────────────────────────────────────────
-  void load() {
+  Future<void> load() async {
     try {
       final nodesRaw = _box.get('nodes');
       if (nodesRaw != null) {
@@ -319,7 +233,7 @@ class AppModel extends ChangeNotifier {
               .map((j) => DecisionEntry.fromJson(j as Map<String, dynamic>)),
         );
       }
-      if (decisions.isEmpty) _seedDecisions();
+      if (decisions.isEmpty) await _seedDecisions();
       _migrateDecisions();
 
       // Load web search room
