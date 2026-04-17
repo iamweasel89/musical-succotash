@@ -29,7 +29,14 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
   WebSearchConfig get _cfg => _m.webSearchConfig;
 
   @override
+  void initState() {
+    super.initState();
+    _m.pushScreen('web-search');
+  }
+
+  @override
   void dispose() {
+    _m.popScreen();
     _input.dispose();
     _scroll.dispose();
     super.dispose();

@@ -14,9 +14,28 @@ import 'web_search_screen.dart';
 
 // ── Мастерская — экран с комнатами ────────────────────────────────────────────
 
-class MasterskayaScreen extends StatelessWidget {
+class MasterskayaScreen extends StatefulWidget {
   final AppModel model;
   const MasterskayaScreen({super.key, required this.model});
+
+  @override
+  State<MasterskayaScreen> createState() => _MasterskayaScreenState();
+}
+
+class _MasterskayaScreenState extends State<MasterskayaScreen> {
+  AppModel get model => widget.model;
+
+  @override
+  void initState() {
+    super.initState();
+    model.pushScreen('masterskaya');
+  }
+
+  @override
+  void dispose() {
+    model.popScreen();
+    super.dispose();
+  }
 
   static const _excerptText =
       'Это экспериментальный режим извлечения текста.\n\n'

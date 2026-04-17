@@ -27,6 +27,12 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _tab = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.model.setBaseScreen(_tab == 0 ? 'chat' : 'canvas');
+  }
+
   // ── Settings ──────────────────────────────────────────────────────────────
 
   void _openSettings() {
@@ -129,6 +135,7 @@ class _MainScreenState extends State<MainScreen> {
       ..addAll(chain);
     widget.model.save();
     setState(() => _tab = 0);
+    widget.model.setBaseScreen('chat');
   }
 
   // ── Share snapshot with Claude (ВИ1 фаза 1) ───────────────────────────────
@@ -226,7 +233,10 @@ class _MainScreenState extends State<MainScreen> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: (i) {
+          setState(() => _tab = i);
+          widget.model.setBaseScreen(i == 0 ? 'chat' : 'canvas');
+        },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.forum), label: 'Chat'),
           NavigationDestination(icon: Icon(Icons.grid_view), label: 'Canvas'),

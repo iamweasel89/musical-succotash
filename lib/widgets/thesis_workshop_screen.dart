@@ -22,6 +22,18 @@ class ThesisWorkshopScreen extends StatefulWidget {
 class _ThesisWorkshopScreenState extends State<ThesisWorkshopScreen> {
   List<ThesisEntry> get _theses => widget.model.theses;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.model.pushScreen('thesis-workshop');
+  }
+
+  @override
+  void dispose() {
+    widget.model.popScreen();
+    super.dispose();
+  }
+
   Future<void> _save() async {
     if (_theses.isEmpty) return;
     await DumpService.saveDump(

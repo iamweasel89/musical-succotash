@@ -82,6 +82,32 @@ class AppModel extends ChangeNotifier {
   final List<UsageEvent> recentUsage = [];
   static const _maxRecentUsage = 100;
 
+  // ── Присутствие: стек открытых экранов ────────────────────────────────────
+  // Обновляется из initState/dispose экранов. Верх стека = «где оператор
+  // прямо сейчас». Стек сохраняет историю навигации (masterskaya → web-search).
+  // Эфемерное состояние, не persist. Используется в debug-сервере /state.
+  final List<String> _screenStack = ['chat'];
+  String get currentScreen =>
+      _screenStack.isEmpty ? 'chat' : _screenStack.last;
+  List<String> get screenStack => List.unmodifiable(_screenStack);
+
+  /// Главный экран (tab внутри MainScreen) — заменяет корень стека.
+  void setBaseScreen(String name) {
+    if (_screenStack.isEmpty) {
+      _screenStack.add(name);
+    } else {
+      _screenStack[0] = name;
+    }
+  }
+
+  /// Вложенный pushed-экран. Вызывается в initState.
+  void pushScreen(String name) => _screenStack.add(name);
+
+  /// Парный вызов к pushScreen в dispose.
+  void popScreen() {
+    if (_screenStack.length > 1) _screenStack.removeLast();
+  }
+
   Future<void> _seedDecisions() async {
     try {
       final raw = await rootBundle.loadString('assets/seed/decisions.json');
