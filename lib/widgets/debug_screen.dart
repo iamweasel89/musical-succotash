@@ -192,8 +192,10 @@ class _DebugScreenState extends State<DebugScreen> {
             'Ключи API в /settings замаскированы. POST /action/* пока только ping — остальное обсуждаем в Разработках.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
-          const Divider(height: 32),
-          _CompressAnything(model: widget.model),
+          if (!widget.model.settings.hideCompressButton) ...[
+            const Divider(height: 32),
+            _CompressAnything(model: widget.model),
+          ],
         ],
       ),
     );

@@ -306,18 +306,19 @@ class _MessageTile extends StatelessWidget {
                 Navigator.pop(ctx);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.compress),
-              title: const Text('Сжать…'),
-              onTap: () {
-                Navigator.pop(ctx);
-                openCompressSheet(
-                  context,
-                  text: message.text,
-                  settings: settings,
-                );
-              },
-            ),
+            if (!settings.hideCompressButton)
+              ListTile(
+                leading: const Icon(Icons.compress),
+                title: const Text('Сжать…'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  openCompressSheet(
+                    context,
+                    text: message.text,
+                    settings: settings,
+                  );
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text('Удалить', style: TextStyle(color: Colors.red)),

@@ -316,11 +316,23 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 _save();
               },
             ),
+            const SizedBox(height: 12),
+            const Text('Компоненты UI',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
+                    color: Colors.grey)),
             _SwitchRow(
               label: 'Скрыть кнопку тезиса на пузыре',
               value: s.hideThesisButton,
               onChanged: (v) {
                 setState(() => s.hideThesisButton = v);
+                _save();
+              },
+            ),
+            _SwitchRow(
+              label: 'Скрыть кнопку compress (сжатие)',
+              value: s.hideCompressButton,
+              onChanged: (v) {
+                setState(() => s.hideCompressButton = v);
                 _save();
               },
             ),

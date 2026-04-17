@@ -818,7 +818,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ? () => _enterMarkup(node)
               : null,
           markupActive: _markupMode,
-          onCompress: node.text.isNotEmpty ? () => _compressNode(node) : null,
+          onCompress: (node.text.isNotEmpty &&
+                  !widget.model.settings.hideCompressButton)
+              ? () => _compressNode(node)
+              : null,
         );
       },
     );

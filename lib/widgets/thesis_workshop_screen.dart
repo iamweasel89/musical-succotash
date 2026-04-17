@@ -369,28 +369,29 @@ class _ThesisCardState extends State<ThesisCard> {
                         size: 16, color: Colors.deepPurple[400]),
                   ),
                 ),
-              GestureDetector(
-                onTap: () {
-                  if (_thesisCtrl.text.trim().isEmpty) return;
-                  openCompressSheet(
-                    context,
-                    text: _thesisCtrl.text,
-                    settings: widget.model.settings,
-                    onApply: (r) {
-                      setState(() {
-                        _thesisCtrl.text = r;
-                        widget.entry.thesis = r;
-                      });
-                      widget.onChanged();
-                    },
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.compress,
-                      size: 14, color: Colors.deepPurple[300]),
+              if (!widget.model.settings.hideCompressButton)
+                GestureDetector(
+                  onTap: () {
+                    if (_thesisCtrl.text.trim().isEmpty) return;
+                    openCompressSheet(
+                      context,
+                      text: _thesisCtrl.text,
+                      settings: widget.model.settings,
+                      onApply: (r) {
+                        setState(() {
+                          _thesisCtrl.text = r;
+                          widget.entry.thesis = r;
+                        });
+                        widget.onChanged();
+                      },
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.compress,
+                        size: 14, color: Colors.deepPurple[300]),
+                  ),
                 ),
-              ),
               const SizedBox(width: 8),
               GestureDetector(
                   onTap: widget.onRemove,
@@ -439,27 +440,28 @@ class _ThesisCardState extends State<ThesisCard> {
                     child: Icon(Icons.bolt, size: 16, color: Colors.grey[500]),
                   ),
                 ),
-              GestureDetector(
-                onTap: () {
-                  if (_answerCtrl.text.trim().isEmpty) return;
-                  openCompressSheet(
-                    context,
-                    text: _answerCtrl.text,
-                    settings: widget.model.settings,
-                    onApply: (r) {
-                      setState(() {
-                        _answerCtrl.text = r;
-                        widget.entry.answer = r;
-                      });
-                      widget.onChanged();
-                    },
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.compress, size: 14, color: Colors.grey[400]),
+              if (!widget.model.settings.hideCompressButton)
+                GestureDetector(
+                  onTap: () {
+                    if (_answerCtrl.text.trim().isEmpty) return;
+                    openCompressSheet(
+                      context,
+                      text: _answerCtrl.text,
+                      settings: widget.model.settings,
+                      onApply: (r) {
+                        setState(() {
+                          _answerCtrl.text = r;
+                          widget.entry.answer = r;
+                        });
+                        widget.onChanged();
+                      },
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.compress, size: 14, color: Colors.grey[400]),
+                  ),
                 ),
-              ),
             ]),
             if (_answerError != null)
               Padding(

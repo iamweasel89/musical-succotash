@@ -27,6 +27,9 @@ class GlobalSettings {
   // Hide the "добавить тезис" button on chat bubbles
   bool hideThesisButton;
 
+  // Hide the compress (ПТ) button across chat / thesis / web-search / debug
+  bool hideCompressButton;
+
   // Debug HTTP server (read-only introspection + screenshot)
   bool debugServerEnabled;
   int debugServerPort;
@@ -60,6 +63,7 @@ class GlobalSettings {
     this.showBubbleTime = false,
     this.showBubbleId = false,
     this.hideThesisButton = false,
+    this.hideCompressButton = false,
     this.debugServerEnabled = false,
     this.debugServerPort = 8080,
     this.debugServerToken = '',
@@ -91,6 +95,7 @@ class GlobalSettings {
         'showBubbleTime': showBubbleTime,
         'showBubbleId': showBubbleId,
         'hideThesisButton': hideThesisButton,
+        'hideCompressButton': hideCompressButton,
         'debugServerEnabled': debugServerEnabled,
         'debugServerPort': debugServerPort,
         'debugServerToken': debugServerToken,
@@ -122,6 +127,7 @@ class GlobalSettings {
         showBubbleTime: j['showBubbleTime'] as bool? ?? false,
         showBubbleId: j['showBubbleId'] as bool? ?? false,
         hideThesisButton: j['hideThesisButton'] as bool? ?? false,
+        hideCompressButton: j['hideCompressButton'] as bool? ?? false,
         debugServerEnabled: j['debugServerEnabled'] as bool? ?? false,
         debugServerPort: j['debugServerPort'] as int? ?? 8080,
         debugServerToken: j['debugServerToken'] as String? ?? '',
