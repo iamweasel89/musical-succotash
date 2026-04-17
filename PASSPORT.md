@@ -92,21 +92,25 @@ lib/
     web_search_room.dart         — WebSearchMessage + WebSearchConfig (комната веб-поиска)
     hex_pos.dart                 — HexPos (q, r)
     hex_layout.dart              — axial hex: направления, соседи
+    reminder.dart                — Reminder (ВР4): локальное напоминание
   services/
     api_runner.dart              — callLlm(), streaming, multi-provider
     agent_runner.dart            — runAgentTurn() с tool_use циклом (web_search)
+    llm_transform.dart           — llmTransform() + compress/tldr/translate пресеты (ПТ)
     web_search.dart              — Tavily + DuckDuckGo с fallback и логом
     debug_server.dart            — HTTP-сервер состояния (GET), опционально
     dump_service.dart            — DumpService.saveDump() → documents/inbox/*.md
     logger.dart                  — AppLogger (ring-buffer in-memory log)
     updater.dart                 — AppUpdater (проверка/скачивание/установка APK)
+    session_tracker.dart         — начало сессии, markActivity (ВР9)
+    reminder_service.dart        — flutter_local_notifications обёртка (ВР4.2)
   canvas/
     canvas_view.dart             — HexCanvas + switcher sheet
     hex_canvas_screen.dart       — HexCanvasScreen (chainMode, deleteMode, chain panel)
     hex_painter.dart             — CustomPainter (grid, nodes, edges)
     hex_math.dart                — hexToWorld, worldToHex
   widgets/
-    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск / справка / отладка / разработки
+    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск / справка / отладка / разработки / напоминания
     thesis_workshop_screen.dart  — режим тезисов (Я1–Я8)
     decision_tree_screen.dart    — дерево решений (Т1–Т5)
     inbox_screen.dart            — просмотр documents/inbox/ (О2)
@@ -114,6 +118,8 @@ lib/
     help_screen.dart             — справка: термины (тезис, канва, инбокс, мастерская, debug)
     debug_screen.dart            — управление debug HTTP-сервером: toggle, токен, IP-список
     razrabotki_screen.dart       — viewer PASSPORT.md из GitHub raw (источник истины — репо)
+    reminders_screen.dart        — комната напоминаний (ВР4.3): список + FAB создания + пресеты
+    compress_sheet.dart          — переиспользуемая шторка compress (ПТ3)
     excerpt_extractor.dart       — свайп-выделение слов, буфер, инерция
     settings_sheet.dart          — настройки (bottom sheet); вход в Мастерскую
     api_node_sheet.dart          — настройки API-ноды
@@ -133,7 +139,8 @@ lib/
 | ExcerptExtractor — свайп-выделение, буфер, инерция, розовый фон | готово |
 | Параграфный hysteresis в экстракторе (Э2) | готово |
 | DumpService — дамп ветки в documents/inbox/ | готово |
-| Мастерская — экран-хаб, 8 комнат (отрывки/тезисы/дерево/инбокс/веб-поиск/справка/отладка/разработки) | готово |
+| Мастерская — экран-хаб, 9 комнат (отрывки/тезисы/дерево/инбокс/веб-поиск/справка/отладка/разработки/напоминания) | готово |
+| Напоминания (ВР4.1–4.3) — Reminder модель, flutter_local_notifications сервис, комната Мастерской с FAB, быстрые пресеты 5м/15м/30м/1ч/2ч/24ч + custom picker | готово |
 | Режим тезисов — карточки, формулировка, ответ (Я1, Я2, Я5, Я7) | готово |
 | Дерево решений — экран в Мастерской, экспорт md (Т1, Т2, Т4) | готово |
 | Инбокс-экран — просмотр documents/inbox/ (О2) | готово |
@@ -305,13 +312,14 @@ lib/
 - ВР2 ритм оператора — пауза, последний раз заходил; реакция AI на возврат *(длительность сессии сделана в ВР9)*
 - ВР3 ✓ локальный контекст момента — part of day (morning/afternoon/evening/night) и workday/weekend в system prompt
 - ВР4 дедлайны, напоминания, обещания:
-  - ВР4.1 модель Reminder в Hive — `{id, scheduledAt, text, linkedRef?, repeat?, done}`
-  - ВР4.2 интеграция `flutter_local_notifications` (Android channel) — локальный шедулер, работает без интернета и сервера
-  - ВР4.3 UI создания — «напомнить в HH:MM» / «через N минут/часов/дней»; из чата через жест, из Мастерской отдельным экраном
-  - ВР4.4 список напоминаний в Мастерской — активные / прошедшие / повторяющиеся
+  - *ВР4.1 ✓ модель Reminder в Hive — `{id, scheduledAt, text, linkedRef?, repeat?, done}`
+  - *ВР4.2 ✓ интеграция `flutter_local_notifications` (Android channel) — локальный шедулер, работает без интернета и сервера
+  - *ВР4.3 ✓ UI создания — «напомнить в HH:MM» / «через N минут/часов/дней»; из Мастерской отдельным экраном
+  - ВР4.4 список напоминаний в Мастерской — активные / прошедшие / повторяющиеся (расширить текущий экран)
   - ВР4.5 агентский tool `create_reminder(at, text)` — оператор пишет в чат «напомни через 2.5 часа про X», AI парсит и создаёт
   - ВР4.6 привязка напоминания к ноде/тезису — при срабатывании открывается в соответствующий контекст
   - ВР4.7 (опц.) пуши с сервера через FCM — если понадобится «кто-то другой пинает оператора»
+  - ВР4-MIGRATE *(запись для будущей миграции)*: phase 1 = локальный шедулер на Android `flutter_local_notifications`, привязан к устройству. Phase 2 (когда понадобится синк / кросс-девайс / серверные пуши) — переехать на серверный шедулер через MCP + FCM; при миграции: формат Reminder не менять, добавить поле `syncedAt`; существующие reminders остаются локальными, новые идут через сервер.
 - ВР5 причинно-следственная логика «до → после → поэтому» — каузальные цепочки с опорой на timestamps
 - ВР6 прогресс и отсчёт — «осталось N дней», «N-й день работы над X»
 - ВР7 ✓ декоратор возраста на UI — `_formatBubbleTime` автоматически: «только что / N мин / N ч / N дн» для свежих, абсолют для старых

@@ -7,6 +7,7 @@ import 'canvas_data.dart';
 import 'decision_entry.dart';
 import 'edge.dart';
 import 'node.dart';
+import 'reminder.dart';
 import 'settings.dart';
 import 'thesis_entry.dart';
 import 'web_search_room.dart';
@@ -70,6 +71,10 @@ class AppModel extends ChangeNotifier {
     webSearchMessages.clear();
     notifyWebSearchChanged();
   }
+
+  // ── Напоминания (ВР4) ─────────────────────────────────────────────────────
+  final List<Reminder> reminders = [];
+  void notifyRemindersChanged() { save(); notifyListeners(); }
 
   void _seedDecisions() {
     // Фиксированные ID чтобы дерево было воспроизводимым
@@ -334,6 +339,15 @@ class AppModel extends ChangeNotifier {
         webSearchConfig.model = loaded.model;
       }
 
+      // Load reminders
+      final remindersRaw = _box.get('reminders');
+      if (remindersRaw != null) {
+        reminders.addAll(
+          (jsonDecode(remindersRaw) as List)
+              .map((j) => Reminder.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+
       // First run or migration: create default canvas from existing data
       if (canvases.isEmpty) {
         final canvas = CanvasData(
@@ -371,6 +385,8 @@ class AppModel extends ChangeNotifier {
       await _box.put('webSearchMessages',
           jsonEncode(webSearchMessages.map((m) => m.toJson()).toList()));
       await _box.put('webSearchConfig', jsonEncode(webSearchConfig.toJson()));
+      await _box.put('reminders',
+          jsonEncode(reminders.map((r) => r.toJson()).toList()));
     } catch (_) {}
   }
 

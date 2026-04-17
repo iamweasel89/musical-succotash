@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'main_screen.dart';
 import 'models/app_model.dart';
 import 'services/debug_server.dart';
+import 'services/reminder_service.dart';
 import 'services/session_tracker.dart';
 
 void main() async {
@@ -12,8 +13,9 @@ void main() async {
   await Hive.openBox<String>('state');
   SessionTracker.init();
   final model = AppModel()..load();
+  // Fire-and-forget — errors logged internally.
+  ReminderService.init();
   if (model.settings.debugServerEnabled) {
-    // Fire-and-forget; errors are logged inside DebugServer.
     DebugServer.start(model, model.settings.debugServerPort);
   }
   runApp(HexCanvasApp(model: model));

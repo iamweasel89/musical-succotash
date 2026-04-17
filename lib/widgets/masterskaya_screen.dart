@@ -7,6 +7,7 @@ import 'excerpt_extractor.dart';
 import 'help_screen.dart';
 import 'inbox_screen.dart';
 import 'razrabotki_screen.dart';
+import 'reminders_screen.dart';
 import 'thesis_workshop_screen.dart';
 import 'web_search_screen.dart';
 
@@ -118,6 +119,14 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'Паспорт проекта, бэклог, архитектура',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => const RazrabotkiScreen(),
+            )),
+          ),
+          _Room(
+            icon: Icons.alarm_outlined,
+            title: 'Напоминания',
+            subtitle: 'Локальные таймеры с уведомлениями',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => RemindersScreen(model: model),
             )),
           ),
         ],
