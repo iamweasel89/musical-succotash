@@ -204,7 +204,10 @@ class AgentResult {
   final String text;
   final int inputTokens;
   final int outputTokens;
-  const AgentResult(this.text, this.inputTokens, this.outputTokens);
+  /// 'ok' | 'limit' — упёрся в лимит итераций, делал fallback-синтез
+  final String status;
+  const AgentResult(this.text, this.inputTokens, this.outputTokens,
+      {this.status = 'ok'});
 }
 
 typedef AgentLogger = void Function(String line);
@@ -312,5 +315,5 @@ Future<AgentResult> runAgentTurn({
       '⏱ итого: ${_formatElapsed(turnStopwatch.elapsed)}, '
       'итераций: $_maxIterations + 1 синтез, '
       'токенов: $totalIn in / $totalOut out');
-  return AgentResult(finalResponse.text, totalIn, totalOut);
+  return AgentResult(finalResponse.text, totalIn, totalOut, status: 'limit');
 }

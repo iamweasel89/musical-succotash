@@ -83,6 +83,7 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
           role: 'assistant',
           text: result.text.isEmpty ? '(пустой ответ)' : result.text,
           logs: List<String>.from(_liveLogs),
+          status: result.status,
         ));
         _liveLogs.clear();
         _busy = false;
@@ -98,6 +99,7 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
           role: 'assistant',
           text: 'Ошибка: $e',
           logs: List<String>.from(_liveLogs),
+          status: 'error',
         ));
         _liveLogs.clear();
         _busy = false;
@@ -244,12 +246,64 @@ class _MessageTile extends StatelessWidget {
     final bg = isUser ? Colors.blue[50] : Colors.grey[100];
     final border = isUser ? Colors.blue[100]! : Colors.grey[300]!;
 
+    // Status icon
+    IconData? statusIcon;
+    Color? statusColor;
+    String? statusTooltip;
+    switch (message.status) {
+      case 'limit':
+        statusIcon = Icons.warning_amber_outlined;
+        statusColor = Colors.orange[700];
+        statusTooltip = 'Агент упёрся в лимит итераций, дан fallback-синтез';
+        break;
+      case 'error':
+        statusIcon = Icons.error_outline;
+        statusColor = Colors.red[400];
+        statusTooltip = 'Ошибка при выполнении';
+        break;
+      case 'ok':
+      case null:
+      default:
+        break;
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment:
             isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
+          // Header: ID + time + status icon
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2, left: 4, right: 4),
+            child: Row(
+              mainAxisAlignment:
+                  isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '#${message.id.substring(0, 6)}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey[500],
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _fmtMessageTime(message.createdAt),
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                ),
+                if (statusIcon != null) ...[
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: statusTooltip ?? '',
+                    child: Icon(statusIcon, size: 12, color: statusColor),
+                  ),
+                ],
+              ],
+            ),
+          ),
           if (!isUser && message.logs.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 4, left: 4),
@@ -290,6 +344,15 @@ class _MessageTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _fmtMessageTime(DateTime t) {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    if (t.year == now.year && t.month == now.month && t.day == now.day) {
+      return '${two(t.hour)}:${two(t.minute)}';
+    }
+    return '${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
   }
 
   void _showActions(BuildContext context) {

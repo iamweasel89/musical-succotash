@@ -12,6 +12,9 @@ class WebSearchMessage {
   final String text;
   final List<String> logs;
   final DateTime createdAt;
+  /// Статус исполнения: null/'ok' — нормально, 'limit' — упёрся в лимит
+  /// итераций и делал fallback-синтез, 'error' — исключение.
+  final String? status;
 
   WebSearchMessage({
     String? id,
@@ -19,6 +22,7 @@ class WebSearchMessage {
     required this.text,
     List<String>? logs,
     DateTime? createdAt,
+    this.status,
   })  : id = id ?? _newId(),
         logs = logs ?? const [],
         createdAt = createdAt ?? DateTime.now();
@@ -29,6 +33,7 @@ class WebSearchMessage {
         'text': text,
         'logs': logs,
         'createdAt': createdAt.toIso8601String(),
+        if (status != null) 'status': status,
       };
 
   factory WebSearchMessage.fromJson(Map<String, dynamic> j) => WebSearchMessage(
@@ -38,6 +43,7 @@ class WebSearchMessage {
         logs: (j['logs'] as List?)?.cast<String>() ?? const [],
         createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ??
             DateTime.now(),
+        status: j['status'] as String?,
       );
 }
 
