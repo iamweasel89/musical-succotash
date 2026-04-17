@@ -197,6 +197,15 @@ class DebugServer {
     _actions[name] = handler;
   }
 
+  /// Снять регистрацию action'а. Вызывается из dispose соответствующего
+  /// виджета, чтобы не оставлять битые handler'ы.
+  static void unregisterAction(String name) {
+    _actions.remove(name);
+  }
+
+  /// Список зарегистрированных actions (для дискаверабилити).
+  static List<String> listActions() => _actions.keys.toList();
+
   static void _json(HttpRequest req, Object data) {
     req.response
       ..statusCode = 200
