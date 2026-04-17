@@ -17,9 +17,10 @@ class SwitchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Expanded(
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
         Switch(value: value, onChanged: onChanged),
       ],
     );
