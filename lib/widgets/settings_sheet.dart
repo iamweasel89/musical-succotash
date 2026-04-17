@@ -6,33 +6,13 @@ import '../models/app_model.dart';
 import '../models/settings.dart';
 import '../services/updater.dart';
 import 'masterskaya_screen.dart';
+import 'settings/chat_display_section.dart';
+import 'settings/data_section.dart';
+import 'settings/default_llm_section.dart';
+import 'settings/switch_row.dart';
+import 'settings/usage_section.dart';
 
-// ── Usage helpers ─────────────────────────────────────────────────────────
-
-const _pricePerMToken = {
-  'anthropic': (3.0, 15.0),   // input, output USD per 1M tokens
-  'openai':    (2.5, 10.0),
-  'deepseek':  (0.27, 1.10),
-};
-
-double _usageCost(String p, int inTok, int outTok) {
-  final pr = _pricePerMToken[p];
-  if (pr == null) return 0;
-  return inTok / 1e6 * pr.$1 + outTok / 1e6 * pr.$2;
-}
-
-String _fmtTokens(int n) {
-  if (n < 1000) return '$n';
-  final s = n.toString();
-  final buf = StringBuffer();
-  for (var i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
-    buf.write(s[i]);
-  }
-  return buf.toString();
-}
-
-String _fmtCost(double usd) => '\$${usd.toStringAsFixed(4)}';
+// ── Главный экран настроек — оркестратор секций ────────────────────────────
 
 class SettingsSheet extends StatefulWidget {
   final AppModel model;
@@ -72,67 +52,23 @@ class _SettingsSheetState extends State<SettingsSheet> {
     super.dispose();
   }
 
-  void _save() => widget.onChanged();
+  /// Вызывается секциями при любом изменении настройки. Персистим + rebuild.
+  void _onChanged() {
+    setState(() {});
+    widget.onChanged();
+  }
 
-  List<Widget> _buildUsageRows(GlobalSettings s) {
-    final data = [
-      ('Anthropic', 'anthropic', s.tokensInAnthropicTotal, s.tokensOutAnthropicTotal),
-      ('OpenAI',    'openai',    s.tokensInOpenaiTotal,    s.tokensOutOpenaiTotal),
-      ('DeepSeek',  'deepseek',  s.tokensInDeepseekTotal,  s.tokensOutDeepseekTotal),
-    ];
-    double totalCost = 0;
-    final rows = <Widget>[];
-    for (final (name, key, inTok, outTok) in data) {
-      final cost = _usageCost(key, inTok, outTok);
-      totalCost += cost;
-      rows.add(Row(
-        children: [
-          SizedBox(
-            width: 76,
-            child: Text(name, style: const TextStyle(fontSize: 12)),
-          ),
-          Expanded(
-            child: Text(
-              '${_fmtTokens(inTok)} in + ${_fmtTokens(outTok)} out',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ),
-          Text(_fmtCost(cost),
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-        ],
-      ));
-    }
-    rows.add(const Divider(height: 12));
-    rows.add(Row(
-      children: [
-        const SizedBox(width: 76),
-        const Expanded(
-          child: Text('Итого',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        ),
-        Text(_fmtCost(totalCost),
-            style: const TextStyle(
-                fontSize: 12,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600)),
-      ],
-    ));
-    rows.add(const SizedBox(height: 8));
-    rows.add(OutlinedButton(
-      onPressed: () {
-        setState(() {
-          s.tokensInAnthropicTotal = 0;
-          s.tokensOutAnthropicTotal = 0;
-          s.tokensInOpenaiTotal = 0;
-          s.tokensOutOpenaiTotal = 0;
-          s.tokensInDeepseekTotal = 0;
-          s.tokensOutDeepseekTotal = 0;
-        });
-        _save();
-      },
-      child: const Text('Сбросить статистику'),
-    ));
-    return rows;
+  void _resetTokenUsage() {
+    setState(() {
+      final s = widget.settings;
+      s.tokensInAnthropicTotal = 0;
+      s.tokensOutAnthropicTotal = 0;
+      s.tokensInOpenaiTotal = 0;
+      s.tokensOutOpenaiTotal = 0;
+      s.tokensInDeepseekTotal = 0;
+      s.tokensOutDeepseekTotal = 0;
+    });
+    widget.onChanged();
   }
 
   @override
@@ -150,49 +86,37 @@ class _SettingsSheetState extends State<SettingsSheet> {
             const Text('Settings',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            _SwitchRow(
+
+            // Базовые флаги
+            SwitchRow(
               label: 'Show node labels',
               value: s.showNodeLabels,
-              onChanged: (v) {
-                setState(() => s.showNodeLabels = v);
-                _save();
-              },
+              onChanged: (v) { s.showNodeLabels = v; _onChanged(); },
             ),
-            _SwitchRow(
+            SwitchRow(
               label: 'Streaming mode',
               value: s.streamingMode,
-              onChanged: (v) {
-                setState(() => s.streamingMode = v);
-                _save();
-              },
+              onChanged: (v) { s.streamingMode = v; _onChanged(); },
             ),
-            _SwitchRow(
+            SwitchRow(
               label: 'Markdown в ответах',
               value: s.renderMarkdown,
-              onChanged: (v) {
-                setState(() => s.renderMarkdown = v);
-                _save();
-              },
+              onChanged: (v) { s.renderMarkdown = v; _onChanged(); },
             ),
-            _SwitchRow(
+            SwitchRow(
               label: 'Скрывать эмодзи',
               value: s.hideEmoji,
-              onChanged: (v) {
-                setState(() => s.hideEmoji = v);
-                _save();
-              },
+              onChanged: (v) { s.hideEmoji = v; _onChanged(); },
             ),
+
             const SizedBox(height: 12),
             const Text('Системный промпт',
                 style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            _SwitchRow(
+            SwitchRow(
               label: 'Встроенный промпт',
               value: s.useBuiltinSystemPrompt,
-              onChanged: (v) {
-                setState(() => s.useBuiltinSystemPrompt = v);
-                _save();
-              },
+              onChanged: (v) { s.useBuiltinSystemPrompt = v; _onChanged(); },
             ),
             const SizedBox(height: 4),
             TextField(
@@ -206,9 +130,10 @@ class _SettingsSheetState extends State<SettingsSheet> {
               ),
               onChanged: (v) {
                 s.defaultSystemPrompt = v;
-                _save();
+                widget.onChanged();
               },
             ),
+
             const SizedBox(height: 4),
             // API keys submenu
             ListTile(
@@ -221,142 +146,22 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 isScrollControlled: true,
                 builder: (_) => _ApiKeysSheet(
                   settings: s,
-                  onChanged: _save,
+                  onChanged: widget.onChanged,
                 ),
               ),
             ),
             const Divider(height: 1),
+
             const SizedBox(height: 12),
-            // Update section
             const _UpdateSection(),
             const Divider(height: 24),
-            // Default API node settings
-            const Text('Нода ЛЛМ (умолчания)',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'anthropic', label: Text('anthropic')),
-                ButtonSegment(value: 'openai', label: Text('openai')),
-                ButtonSegment(value: 'deepseek', label: Text('deepseek')),
-              ],
-              selected: {s.defaultProvider},
-              onSelectionChanged: (sel) => setState(() {
-                s.defaultProvider = sel.first;
-                s.defaultModel = sel.first == 'anthropic'
-                    ? 'claude-sonnet-4-5'
-                    : sel.first == 'openai'
-                        ? 'gpt-4o'
-                        : 'deepseek-chat';
-                _save();
-              }),
-            ),
-            const SizedBox(height: 8),
-            Text('Max tokens',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
-                  .map((t) => ChoiceChip(
-                        label: Text('$t',
-                            style: const TextStyle(fontSize: 11)),
-                        selected: s.defaultMaxTokens == t,
-                        onSelected: (_) {
-                          setState(() => s.defaultMaxTokens = t);
-                          _save();
-                        },
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 8),
-            Text('Temperature',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              children: [0.0, 0.3, 0.7, 1.0]
-                  .map((t) => ChoiceChip(
-                        label: Text(t.toString()),
-                        selected: s.defaultTemperature == t,
-                        onSelected: (_) {
-                          setState(() => s.defaultTemperature = t);
-                          _save();
-                        },
-                      ))
-                  .toList(),
-            ),
+
+            DefaultLlmSection(settings: s, onChanged: _onChanged),
             const Divider(height: 24),
-            // Compact chat
-            const Text('Компактный чат',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            _SwitchRow(
-              label: 'Сворачивать по умолчанию',
-              value: s.compactChat,
-              onChanged: (v) {
-                setState(() => s.compactChat = v);
-                _save();
-              },
-            ),
-            _SwitchRow(
-              label: 'Время на пузыре',
-              value: s.showBubbleTime,
-              onChanged: (v) {
-                setState(() => s.showBubbleTime = v);
-                _save();
-              },
-            ),
-            _SwitchRow(
-              label: 'ID на пузыре',
-              value: s.showBubbleId,
-              onChanged: (v) {
-                setState(() => s.showBubbleId = v);
-                _save();
-              },
-            ),
-            const SizedBox(height: 12),
-            const Text('Компоненты UI',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
-                    color: Colors.grey)),
-            _SwitchRow(
-              label: 'Скрыть кнопку тезиса на пузыре',
-              value: s.hideThesisButton,
-              onChanged: (v) {
-                setState(() => s.hideThesisButton = v);
-                _save();
-              },
-            ),
-            _SwitchRow(
-              label: 'Скрыть кнопку compress (сжатие)',
-              value: s.hideCompressButton,
-              onChanged: (v) {
-                setState(() => s.hideCompressButton = v);
-                _save();
-              },
-            ),
-            Row(
-              children: [
-                const Text('Строк видно:',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(width: 12),
-                Wrap(
-                  spacing: 4,
-                  children: [3, 5, 10]
-                      .map((n) => ChoiceChip(
-                            label: Text('$n'),
-                            selected: s.compactLines == n,
-                            onSelected: (_) {
-                              setState(() => s.compactLines = n);
-                              _save();
-                            },
-                          ))
-                      .toList(),
-                ),
-              ],
-            ),
+
+            ChatDisplaySection(settings: s, onChanged: _onChanged),
             const Divider(height: 24),
+
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.handyman_outlined),
@@ -367,104 +172,23 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 builder: (_) => MasterskayaScreen(model: widget.model),
               )),
             ),
-            if (widget.onExport != null || widget.onImport != null) ...[
+
+            if (widget.onExport != null ||
+                widget.onImport != null ||
+                widget.onClearAll != null) ...[
               const Divider(height: 24),
-              const Text('Данные',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  if (widget.onExport != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.upload_outlined, size: 18),
-                        label: const Text('Экспорт'),
-                        onPressed: widget.onExport,
-                      ),
-                    ),
-                  if (widget.onExport != null && widget.onImport != null)
-                    const SizedBox(width: 8),
-                  if (widget.onImport != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.download_outlined, size: 18),
-                        label: const Text('Импорт'),
-                        onPressed: widget.onImport,
-                      ),
-                    ),
-                ],
+              DataSection(
+                onExport: widget.onExport,
+                onImport: widget.onImport,
+                onClearAll: widget.onClearAll,
               ),
             ],
+
             const Divider(height: 24),
-            const Text('Использование API',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            ..._buildUsageRows(s),
-            if (widget.onClearAll != null) ...[
-              const Divider(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.delete_forever, color: Colors.red),
-                  label: const Text('Очистить все данные',
-                      style: TextStyle(color: Colors.red)),
-                  style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.red)),
-                  onPressed: () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Очистить всё?'),
-                        content: const Text(
-                            'Все ноды, рёбра и история чата будут удалены. Настройки и ключи сохранятся.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Отмена'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Удалить',
-                                style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok == true) {
-                      widget.onClearAll!();
-                      if (context.mounted) Navigator.pop(context);
-                    }
-                  },
-                ),
-              ),
-            ],
+            UsageSection(settings: s, onReset: _resetTokenUsage),
           ],
         ),
       ),
-    );
-  }
-}
-
-// ── Reusable switch row ────────────────────────────────────────────────────
-class _SwitchRow extends StatelessWidget {
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _SwitchRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        Switch(value: value, onChanged: onChanged),
-      ],
     );
   }
 }
@@ -528,11 +252,9 @@ class _ApiKeysSheetState extends State<_ApiKeysSheet> {
             const Text('API Keys',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            _KeyField(
-                label: 'Anthropic', ctrl: _anthropicCtrl, onChanged: _save),
+            _KeyField(label: 'Anthropic', ctrl: _anthropicCtrl, onChanged: _save),
             _KeyField(label: 'OpenAI', ctrl: _openAiCtrl, onChanged: _save),
-            _KeyField(
-                label: 'DeepSeek', ctrl: _deepSeekCtrl, onChanged: _save),
+            _KeyField(label: 'DeepSeek', ctrl: _deepSeekCtrl, onChanged: _save),
             _KeyField(
                 label: 'Tavily (web search)',
                 ctrl: _tavilyCtrl,
