@@ -6,6 +6,7 @@ import 'decision_tree_screen.dart';
 import 'excerpt_extractor.dart';
 import 'help_screen.dart';
 import 'inbox_screen.dart';
+import 'razrabotki_screen.dart';
 import 'thesis_workshop_screen.dart';
 import 'web_search_screen.dart';
 
@@ -109,6 +110,14 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'HTTP-сервер состояния + скриншот для Claude Code',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => DebugScreen(model: model),
+            )),
+          ),
+          _Room(
+            icon: Icons.construction_outlined,
+            title: 'Разработки',
+            subtitle: 'Паспорт проекта, бэклог, архитектура',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const RazrabotkiScreen(),
             )),
           ),
         ],

@@ -1,8 +1,16 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_model.dart';
 import '../services/debug_server.dart';
+
+String _newToken() {
+  final r = Random.secure();
+  final bytes = List<int>.generate(16, (_) => r.nextInt(256));
+  return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+}
 
 // ── Мастерская: Отладка ──────────────────────────────────────────────────────
 
@@ -43,6 +51,9 @@ class _DebugScreenState extends State<DebugScreen> {
   Future<void> _toggle(bool v) async {
     final s = widget.model.settings;
     s.debugServerEnabled = v;
+    if (v && s.debugServerToken.isEmpty) {
+      s.debugServerToken = _newToken();
+    }
     widget.model.notifySettingsChanged();
     setState(() => _startError = null);
     try {
@@ -55,6 +66,13 @@ class _DebugScreenState extends State<DebugScreen> {
       if (mounted) setState(() => _startError = e.toString());
     }
     _refreshIps();
+  }
+
+  void _regenerateToken() {
+    setState(() {
+      widget.model.settings.debugServerToken = _newToken();
+    });
+    widget.model.notifySettingsChanged();
   }
 
   @override
@@ -95,6 +113,47 @@ class _DebugScreenState extends State<DebugScreen> {
           const Divider(),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('X-Debug-Token',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  widget.model.settings.debugServerToken.isEmpty
+                      ? '(не установлен)'
+                      : widget.model.settings.debugServerToken,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Скопировать',
+                icon: const Icon(Icons.copy, size: 18),
+                onPressed: widget.model.settings.debugServerToken.isEmpty
+                    ? null
+                    : () {
+                        Clipboard.setData(ClipboardData(
+                            text: widget.model.settings.debugServerToken));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Токен скопирован'),
+                              duration: Duration(seconds: 1)),
+                        );
+                      },
+              ),
+              IconButton(
+                tooltip: 'Перегенерировать',
+                icon: const Icon(Icons.refresh, size: 18),
+                onPressed: _regenerateToken,
+              ),
+            ],
+          ),
+          const Text(
+            'В запросах: заголовок X-Debug-Token или ?token=… в URL.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+          const Divider(),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
             child: Text('Доступные адреса',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
@@ -121,15 +180,15 @@ class _DebugScreenState extends State<DebugScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
           const SelectableText(
-            'curl http://<ip>:8080/state\n'
-            'curl http://<ip>:8080/screenshot --output screen.png',
+            'curl -H "X-Debug-Token: <token>" http://<ip>:8080/state\n'
+            'curl -H "X-Debug-Token: <token>" http://<ip>:8080/screenshot --output screen.png\n'
+            'curl -H "X-Debug-Token: <token>" -X POST http://<ip>:8080/action/ping -d "{\\"hi\\":1}"',
             style: TextStyle(fontFamily: 'monospace'),
           ),
           const SizedBox(height: 16),
           const Text(
-            'Сервер слушает только GET и не принимает команд. '
-            'Ключи API в /settings замаскированы. '
-            'Через Tailscale — доступ вне локальной сети.',
+            'GET без токена: только / и /ips (self-discovery). Остальное — требует X-Debug-Token. '
+            'Ключи API в /settings замаскированы. POST /action/* пока только ping — остальное обсуждаем в Разработках.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],

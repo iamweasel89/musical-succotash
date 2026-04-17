@@ -57,6 +57,9 @@
 ### Пуш
 Часть конвейера. После готовой задачи: коммит → пуш → сообщи хэш → дальше.
 
+### Консоль вместо ручной возни с файлами
+Любые скрипты, конфиги, .ps1/.bat/.json и прочие файлы на машине оператора создаются и наполняются **одной командой из консоли** (Set-Content / Out-File / heredoc). Инструкция «открой файл X, вставь Y» недопустима — всегда даём pastable command.
+
 ---
 
 ## Архитектура
@@ -93,13 +96,14 @@ lib/
     hex_painter.dart             — CustomPainter (grid, nodes, edges)
     hex_math.dart                — hexToWorld, worldToHex
   widgets/
-    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск / справка / отладка
+    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск / справка / отладка / разработки
     thesis_workshop_screen.dart  — режим тезисов (Я1–Я8)
     decision_tree_screen.dart    — дерево решений (Т1–Т5)
     inbox_screen.dart            — просмотр documents/inbox/ (О2)
     web_search_screen.dart       — комната веб-поиска (ПО): чат-агент с tool_use, история, настройки
     help_screen.dart             — справка: термины (тезис, канва, инбокс, мастерская, debug)
-    debug_screen.dart            — управление debug HTTP-сервером: toggle, IP-список, endpoints
+    debug_screen.dart            — управление debug HTTP-сервером: toggle, токен, IP-список
+    razrabotki_screen.dart       — viewer PASSPORT.md из GitHub raw (источник истины — репо)
     excerpt_extractor.dart       — свайп-выделение слов, буфер, инерция
     settings_sheet.dart          — настройки (bottom sheet); вход в Мастерскую
     api_node_sheet.dart          — настройки API-ноды
@@ -119,14 +123,16 @@ lib/
 | ExcerptExtractor — свайп-выделение, буфер, инерция, розовый фон | готово |
 | Параграфный hysteresis в экстракторе (Э2) | готово |
 | DumpService — дамп ветки в documents/inbox/ | готово |
-| Мастерская — экран-хаб, 7 комнат (отрывки/тезисы/дерево/инбокс/веб-поиск/справка/отладка) | готово |
+| Мастерская — экран-хаб, 8 комнат (отрывки/тезисы/дерево/инбокс/веб-поиск/справка/отладка/разработки) | готово |
 | Режим тезисов — карточки, формулировка, ответ (Я1, Я2, Я5, Я7) | готово |
 | Дерево решений — экран в Мастерской, экспорт md (Т1, Т2, Т4) | готово |
 | Инбокс-экран — просмотр documents/inbox/ (О2) | готово |
 | Поиск по нодам — SearchScreen, переход к цепочке | готово |
 | Веб-поиск — комната Мастерской, агент с web_search, Tavily/DDG, история (ПО1–ПО4) | готово |
 | Справка — комната Мастерской (термины: тезис, канва, инбокс, мастерская, debug) | готово |
-| Отладка — debug HTTP-сервер (GET /state /screenshot /logs ...), тумблер + IP-список | готово |
+| Отладка — debug HTTP-сервер (GET /state /screenshot /logs ...), тумблер + IP-список + токен | готово |
+| Auth-токен debug-сервера (ОТ3) — header X-Debug-Token, POST /action/* framework с ping | готово |
+| Разработки — viewer PASSPORT.md из GitHub raw, кнопка обновления | готово |
 | Обфускация APK (--obfuscate + --split-debug-info), символы в артефакт CI | готово |
 | workflow_dispatch — ручной триггер release в обход ветки | готово |
 | Скрытие кнопки тезиса на пузыре — флаг в настройках | готово |
@@ -237,8 +243,8 @@ lib/
 
 **ОТ — Отладочный API**
 - ОТ1 ✓ debug HTTP-сервер — GET /state /settings /logs /canvas /theses /decisions /websearch /ips /screenshot; тумблер в Мастерской; биндится 0.0.0.0 (LAN + Tailscale)
-- ОТ2  remote-control endpoints — POST /action/tap, /action/openSettings, /action/sendMessage (Claude может не только читать, но и действовать)
-- ОТ3  auth-токен для сервера — одноразовый код в настройках, проверяется в заголовке; защита от чужих в той же сети
+- ОТ2 ·½ remote-control endpoints — framework POST /action/* + ping готов; конкретные actions (tap, sendMessage, openSettings и т.д.) набираем после обсуждения в «Разработках»
+- ОТ3 ✓ auth-токен — 32-байтовый hex, заголовок X-Debug-Token / ?token=; публично только / и /ips
 - ОТ4  hot-reload дампа — принудительный дамп текущей ветки чата в inbox по запросу Claude
 
 **МЦ — MCP-клиент**

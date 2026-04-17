@@ -77,37 +77,121 @@ class DebugServer {
 
   static Future<void> _handle(HttpRequest req) async {
     final path = req.uri.path;
+    final method = req.method;
+
+    // Public (no auth): index page and /ips (useful for self-discovery)
+    final publicGet = {'/', '/ips'};
+    if (!(method == 'GET' && publicGet.contains(path))) {
+      if (!_checkAuth(req)) return;
+    }
+
     try {
-      switch (path) {
-        case '/':
-          _html(req, _indexHtml());
-        case '/state':
-          _json(req, await _state());
-        case '/settings':
-          _json(req, _settings());
-        case '/logs':
-          _json(req, _logs());
-        case '/canvas':
-          _json(req, _canvas());
-        case '/theses':
-          _json(req, _theses());
-        case '/decisions':
-          _json(req, _decisions());
-        case '/websearch':
-          _json(req, _webSearch());
-        case '/ips':
-          _json(req, await currentIps());
-        case '/screenshot':
-          await _screenshot(req);
-        default:
-          req.response.statusCode = 404;
-          await req.response.close();
+      if (method == 'GET') {
+        switch (path) {
+          case '/':
+            _html(req, _indexHtml());
+          case '/state':
+            _json(req, await _state());
+          case '/settings':
+            _json(req, _settings());
+          case '/logs':
+            _json(req, _logs());
+          case '/canvas':
+            _json(req, _canvas());
+          case '/theses':
+            _json(req, _theses());
+          case '/decisions':
+            _json(req, _decisions());
+          case '/websearch':
+            _json(req, _webSearch());
+          case '/ips':
+            _json(req, await currentIps());
+          case '/screenshot':
+            await _screenshot(req);
+          default:
+            req.response.statusCode = 404;
+            await req.response.close();
+        }
+      } else if (method == 'POST' && path.startsWith('/action/')) {
+        await _handleAction(req, path.substring('/action/'.length));
+      } else {
+        req.response.statusCode = 405;
+        await req.response.close();
       }
     } catch (e) {
       req.response.statusCode = 500;
       req.response.write('error: $e');
       await req.response.close();
     }
+  }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  static bool _checkAuth(HttpRequest req) {
+    final expected = _model?.settings.debugServerToken ?? '';
+    if (expected.isEmpty) {
+      // Token unset: treat server as unauthenticated fallback — still allow,
+      // but log. Turning off the server is the right way to lock.
+      return true;
+    }
+    final provided = req.headers.value('x-debug-token') ??
+        req.uri.queryParameters['token'] ??
+        '';
+    if (provided == expected) return true;
+    req.response.statusCode = 401;
+    req.response.headers.contentType = ContentType.json;
+    req.response.write('{"error":"missing or invalid X-Debug-Token"}');
+    req.response.close();
+    return false;
+  }
+
+  // ── Action dispatch ───────────────────────────────────────────────────────
+
+  static Future<void> _handleAction(HttpRequest req, String name) async {
+    String bodyStr = '';
+    try {
+      bodyStr = await utf8.decoder.bind(req).join();
+    } catch (_) {}
+    Map<String, dynamic> args = const {};
+    if (bodyStr.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(bodyStr);
+        if (decoded is Map<String, dynamic>) args = decoded;
+      } catch (_) {}
+    }
+
+    final handler = _actions[name];
+    if (handler == null) {
+      req.response.statusCode = 404;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write('{"error":"unknown action: $name"}');
+      await req.response.close();
+      return;
+    }
+    try {
+      final result = await handler(_model!, args);
+      _json(req, {'ok': true, 'result': result});
+    } catch (e) {
+      req.response.statusCode = 500;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write('{"ok":false,"error":"$e"}');
+      await req.response.close();
+    }
+  }
+
+  /// Registry of POST /action/* handlers. Empty by default — concrete actions
+  /// are added after MVP discussion in Мастерская → Разработки.
+  static final Map<String, Future<Object?> Function(AppModel, Map<String, dynamic>)>
+      _actions = {
+    'ping': (model, args) async => {'pong': DateTime.now().toIso8601String(), 'echo': args},
+  };
+
+  /// External registrar — UI layers call this to expose actions.
+  static void registerAction(
+    String name,
+    Future<Object?> Function(AppModel, Map<String, dynamic>) handler,
+  ) {
+    _actions[name] = handler;
   }
 
   static void _json(HttpRequest req, Object data) {

@@ -30,6 +30,7 @@ class GlobalSettings {
   // Debug HTTP server (read-only introspection + screenshot)
   bool debugServerEnabled;
   int debugServerPort;
+  String debugServerToken;
 
   // Token usage totals (cumulative)
   int tokensInAnthropicTotal;
@@ -61,6 +62,7 @@ class GlobalSettings {
     this.hideThesisButton = false,
     this.debugServerEnabled = false,
     this.debugServerPort = 8080,
+    this.debugServerToken = '',
     this.tokensInAnthropicTotal = 0,
     this.tokensOutAnthropicTotal = 0,
     this.tokensInOpenaiTotal = 0,
@@ -91,6 +93,7 @@ class GlobalSettings {
         'hideThesisButton': hideThesisButton,
         'debugServerEnabled': debugServerEnabled,
         'debugServerPort': debugServerPort,
+        'debugServerToken': debugServerToken,
         'tokensInAnthropicTotal': tokensInAnthropicTotal,
         'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
         'tokensInOpenaiTotal': tokensInOpenaiTotal,
@@ -121,6 +124,7 @@ class GlobalSettings {
         hideThesisButton: j['hideThesisButton'] as bool? ?? false,
         debugServerEnabled: j['debugServerEnabled'] as bool? ?? false,
         debugServerPort: j['debugServerPort'] as int? ?? 8080,
+        debugServerToken: j['debugServerToken'] as String? ?? '',
         tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
         tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
         tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,
