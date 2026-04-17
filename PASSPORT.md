@@ -250,7 +250,7 @@ lib/
 **Ц — CI/CD**
 - Ц1 ✓ обфускация APK (--obfuscate + --split-debug-info)
 - Ц2 ✓ workflow_dispatch для ручного release
-- Ц3  branch protection на hex-canvas-mobile-08MeM — требовать зелёный CI перед push (настройка GitHub UI)
+- Ц3 ✓ branch protection на hex-canvas-mobile-08MeM — требовать зелёный Android APK чек
 - Ц4  артефакт symbols в релизе, чтобы стек-трейсы можно было демаппинг
 
 **Ш — Защита системы** *(обсудить перед внедрением)*
