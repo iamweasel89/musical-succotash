@@ -51,7 +51,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
   void _updateVisibleRange() {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
-    final count = _msgs.length;
+    final count = _buildSessions().length;
     if (count == 0 || pos.maxScrollExtent <= 0) {
       _visibleFirst = 0;
       _visibleLast = count - 1;
@@ -71,19 +71,25 @@ class _WebSearchScreenState extends State<WebSearchScreen>
   @override
   Map<String, dynamic> capture() {
     _updateVisibleRange();
+    // Сессии новее→старее (как в UI).
+    final sessions = _buildSessions().reversed.toList();
     final items = <Map<String, dynamic>>[];
-    final from = _visibleFirst.clamp(0, _msgs.length);
-    final to = (_visibleLast + 1).clamp(0, _msgs.length);
+    final from = _visibleFirst.clamp(0, sessions.length);
+    final to = (_visibleLast + 1).clamp(0, sessions.length);
     for (var i = from; i < to; i++) {
-      final m = _msgs[i];
-      final text = m.text;
+      final s = sessions[i];
+      final qText = s.query.text;
+      final aText = s.answer?.text ?? '';
       items.add({
         'index': i,
-        'id': m.id,
-        'role': m.role,
-        'textPreview': text.length > 200 ? '${text.substring(0, 200)}…' : text,
-        'status': m.status,
-        'logCount': m.logs.length,
+        'queryId': s.query.id,
+        'queryPreview':
+            qText.length > 160 ? '${qText.substring(0, 160)}…' : qText,
+        'answered': s.answer != null,
+        'answerStatus': s.answer?.status,
+        'answerPreview':
+            aText.length > 160 ? '${aText.substring(0, 160)}…' : aText,
+        'createdAt': s.query.createdAt.toIso8601String(),
       });
     }
     return {
@@ -91,7 +97,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
       'title': 'Веб-поиск',
       'provider': _cfg.provider,
       'model': _cfg.model,
-      'messageCount': _msgs.length,
+      'sessionCount': sessions.length,
       'visibleRange': [_visibleFirst, _visibleLast],
       'busy': _busy,
       'liveLogs': _busy ? _liveLogs : const <String>[],
@@ -197,39 +203,6 @@ class _WebSearchScreenState extends State<WebSearchScreen>
     }
   }
 
-  void _deleteMessage(String id) {
-    setState(() => _msgs.removeWhere((m) => m.id == id));
-    _m.notifyWebSearchChanged();
-  }
-
-  // Пара «запрос + ответ» по индексу клика. user → следующий assistant;
-  // assistant → предыдущий user. Может вернуть один из двух nullable.
-  void _openDetail(int i) {
-    final msg = _msgs[i];
-    WebSearchMessage? query;
-    WebSearchMessage? answer;
-    if (msg.role == 'user') {
-      query = msg;
-      for (var j = i + 1; j < _msgs.length; j++) {
-        if (_msgs[j].role == 'assistant') {
-          answer = _msgs[j];
-          break;
-        }
-      }
-    } else {
-      answer = msg;
-      for (var j = i - 1; j >= 0; j--) {
-        if (_msgs[j].role == 'user') {
-          query = _msgs[j];
-          break;
-        }
-      }
-    }
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => WebSearchDetailScreen(query: query, answer: answer),
-    ));
-  }
-
   void _openConfig() {
     showModalBottomSheet(
       context: context,
@@ -244,8 +217,57 @@ class _WebSearchScreenState extends State<WebSearchScreen>
     );
   }
 
+  // Новый поиск — модальная шторка с полем ввода. После отправки — карточка-
+  // сеанс появляется в списке, агент работает в фоне.
+  void _openNewSearchSheet() {
+    if (_busy) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: _InputBar(
+          controller: _input,
+          busy: _busy,
+          onSend: () {
+            Navigator.pop(ctx);
+            _send();
+          },
+        ),
+      ),
+    );
+  }
+
+  // Группировка плоского списка сообщений в сеансы (user query + answer).
+  List<_Session> _buildSessions() {
+    final out = <_Session>[];
+    for (var i = 0; i < _msgs.length; i++) {
+      final m = _msgs[i];
+      if (m.role != 'user') continue;
+      WebSearchMessage? ans;
+      if (i + 1 < _msgs.length && _msgs[i + 1].role == 'assistant') {
+        ans = _msgs[i + 1];
+      }
+      out.add(_Session(m, ans));
+    }
+    return out;
+  }
+
+  // Удалить сеанс целиком (запрос + ответ если есть).
+  void _deleteSession(_Session s) {
+    setState(() {
+      _msgs.removeWhere(
+          (m) => m.id == s.query.id || (s.answer != null && m.id == s.answer!.id));
+    });
+    _m.notifyWebSearchChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sessions = _buildSessions();
+    // Новее — наверху.
+    final reversed = sessions.reversed.toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Веб-поиск'),
@@ -258,45 +280,53 @@ class _WebSearchScreenState extends State<WebSearchScreen>
           if (_msgs.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Очистить историю',
+              tooltip: 'Очистить всё',
               onPressed: _confirmClear,
             ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _busy ? null : _openNewSearchSheet,
+        icon: const Icon(Icons.add),
+        label: const Text('Новый поиск'),
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: _msgs.isEmpty && !_busy
-                  ? const _EmptyHint()
-                  : ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _msgs.length + (_busy ? 1 : 0),
-                      itemBuilder: (ctx, i) {
-                        if (i < _msgs.length) {
-                          final m = _msgs[i];
-                          return _MessageTile(
-                            message: m,
-                            onDelete: () => _deleteMessage(m.id),
-                            onOpenDetail: () => _openDetail(i),
-                            settings: _m.settings,
-                          );
-                        }
-                        return _BusyTile(logs: _liveLogs);
-                      },
-                    ),
-            ),
-            _InputBar(
-              controller: _input,
-              busy: _busy,
-              onSend: _send,
-            ),
-          ],
-        ),
+        child: reversed.isEmpty && !_busy
+            ? const _EmptyHint()
+            : ListView.builder(
+                controller: _scroll,
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+                itemCount: reversed.length,
+                itemBuilder: (ctx, i) {
+                  final s = reversed[i];
+                  final isRunning =
+                      _busy && i == 0 && s.answer == null;
+                  return _SessionCard(
+                    session: s,
+                    running: isRunning,
+                    liveLogs: isRunning ? _liveLogs : const [],
+                    onOpen: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => WebSearchDetailScreen(
+                        query: s.query,
+                        answer: s.answer,
+                      ),
+                    )),
+                    onDelete: () => _deleteSession(s),
+                    settings: _m.settings,
+                  );
+                },
+              ),
       ),
     );
   }
+}
+
+// ── Session: пара «запрос + ответ» ─────────────────────────────────────────
+
+class _Session {
+  final WebSearchMessage query;
+  final WebSearchMessage? answer;
+  const _Session(this.query, this.answer);
 }
 
 // ── Empty state ────────────────────────────────────────────────────────────
@@ -320,130 +350,136 @@ class _EmptyHint extends StatelessWidget {
   }
 }
 
-// ── Message tile ───────────────────────────────────────────────────────────
+// ── Session card: один сеанс-подраздел в ленте ────────────────────────────
 
-class _MessageTile extends StatelessWidget {
-  final WebSearchMessage message;
+class _SessionCard extends StatelessWidget {
+  final _Session session;
+  final bool running;
+  final List<String> liveLogs;
+  final VoidCallback onOpen;
   final VoidCallback onDelete;
-  final VoidCallback onOpenDetail;
   final GlobalSettings settings;
 
-  const _MessageTile({
-    required this.message,
+  const _SessionCard({
+    required this.session,
+    required this.running,
+    required this.liveLogs,
+    required this.onOpen,
     required this.onDelete,
-    required this.onOpenDetail,
     required this.settings,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isUser = message.role == 'user';
-    final align = isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final bg = isUser ? Colors.blue[50] : Colors.grey[100];
-    final border = isUser ? Colors.blue[100]! : Colors.grey[300]!;
+    final q = session.query;
+    final a = session.answer;
+    final ts = q.createdAt;
 
-    // Status icon
     IconData? statusIcon;
     Color? statusColor;
     String? statusTooltip;
-    switch (message.status) {
-      case 'limit':
-        statusIcon = Icons.warning_amber_outlined;
-        statusColor = Colors.orange[700];
-        statusTooltip = 'Агент упёрся в лимит итераций, дан fallback-синтез';
-        break;
-      case 'error':
-        statusIcon = Icons.error_outline;
-        statusColor = Colors.red[400];
-        statusTooltip = 'Ошибка при выполнении';
-        break;
-      case 'ok':
-      case null:
-      default:
-        break;
+    if (running) {
+      statusTooltip = 'Идёт поиск';
+    } else if (a == null) {
+      statusIcon = Icons.hourglass_empty;
+      statusColor = Colors.grey;
+      statusTooltip = 'Нет ответа';
+    } else {
+      switch (a.status) {
+        case 'limit':
+          statusIcon = Icons.warning_amber_outlined;
+          statusColor = Colors.orange[700];
+          statusTooltip = 'Упёрся в лимит итераций';
+          break;
+        case 'error':
+          statusIcon = Icons.error_outline;
+          statusColor = Colors.red[400];
+          statusTooltip = 'Ошибка';
+          break;
+        default:
+          statusIcon = Icons.check_circle_outline;
+          statusColor = Colors.green[600];
+          statusTooltip = 'Готово';
+      }
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment:
-            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          // Header: ID + time + status icon
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2, left: 4, right: 4),
-            child: Row(
-              mainAxisAlignment:
-                  isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '#${message.id.substring(0, 6)}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[500],
-                    fontFamily: 'monospace',
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: onOpen,
+        onLongPress: () => _showActions(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (running)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else if (statusIcon != null)
+                    Tooltip(
+                      message: statusTooltip ?? '',
+                      child: Icon(statusIcon, size: 16, color: statusColor),
+                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _fmtTime(ts),
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _fmtMessageTime(message.createdAt),
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                ),
-                if (statusIcon != null) ...[
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: statusTooltip ?? '',
-                    child: Icon(statusIcon, size: 12, color: statusColor),
+                  const Spacer(),
+                  Text(
+                    '#${q.id.substring(0, 6)}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[500],
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                q.text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              if (running && liveLogs.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                for (final l in liveLogs.take(3))
+                  Text(l,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      )),
+              ] else if (a != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  a.text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
               ],
-            ),
+            ],
           ),
-          if (!isUser && message.logs.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4, left: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: message.logs
-                    .map((l) => Text(l,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        )))
-                    .toList(),
-              ),
-            ),
-          Align(
-            alignment: align,
-            child: GestureDetector(
-              onTap: onOpenDetail,
-              onLongPress: () => _showActions(context),
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.85,
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: bg,
-                  border: Border.all(color: border),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: SelectableText(
-                  message.text,
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  static String _fmtMessageTime(DateTime t) {
+  static String _fmtTime(DateTime t) {
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     if (t.year == now.year && t.month == now.month && t.day == now.day) {
@@ -461,28 +497,39 @@ class _MessageTile extends StatelessWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.copy),
-              title: const Text('Скопировать'),
+              title: const Text('Скопировать запрос'),
               onTap: () {
-                Clipboard.setData(ClipboardData(text: message.text));
+                Clipboard.setData(ClipboardData(text: session.query.text));
                 Navigator.pop(ctx);
               },
             ),
-            if (!settings.hideCompressButton)
+            if (session.answer != null)
+              ListTile(
+                leading: const Icon(Icons.copy_all),
+                title: const Text('Скопировать ответ'),
+                onTap: () {
+                  Clipboard.setData(
+                      ClipboardData(text: session.answer!.text));
+                  Navigator.pop(ctx);
+                },
+              ),
+            if (!settings.hideCompressButton && session.answer != null)
               ListTile(
                 leading: const Icon(Icons.compress),
-                title: const Text('Сжать…'),
+                title: const Text('Сжать ответ…'),
                 onTap: () {
                   Navigator.pop(ctx);
                   openCompressSheet(
                     context,
-                    text: message.text,
+                    text: session.answer!.text,
                     settings: settings,
                   );
                 },
               ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('Удалить', style: TextStyle(color: Colors.red)),
+              title: const Text('Удалить сеанс',
+                  style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
                 onDelete();
@@ -490,45 +537,6 @@ class _MessageTile extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Busy tile (live logs while waiting) ────────────────────────────────────
-
-class _BusyTile extends StatelessWidget {
-  final List<String> logs;
-  const _BusyTile({required this.logs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ...logs.map((l) => Text(l,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
-              ))),
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 8),
-                Text('думает…', style: TextStyle(color: Colors.grey)),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
