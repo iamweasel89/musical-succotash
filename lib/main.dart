@@ -34,10 +34,13 @@ class HexCanvasApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
         useMaterial3: true,
       ),
-      home: RepaintBoundary(
+      // Обёртка вокруг Navigator (не home) — чтобы скриншот захватывал
+      // модальные шторки и pushed-экраны, живущие в root Overlay.
+      builder: (context, child) => RepaintBoundary(
         key: DebugServer.screenshotKey,
-        child: MainScreen(model: model),
+        child: child ?? const SizedBox.shrink(),
       ),
+      home: MainScreen(model: model),
     );
   }
 }
