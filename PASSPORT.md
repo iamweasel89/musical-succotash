@@ -290,6 +290,8 @@ lib/
 
 **ОТ — Отладочный API**
 - ОТ1 ✓ debug HTTP-сервер — GET /state /settings /logs /canvas /theses /decisions /websearch /ips /screenshot; тумблер в Мастерской; биндится 0.0.0.0 (LAN + Tailscale)
+- ОТ5 ✓ GET /screen — снимок текущего экрана (ScreenSnapshotProvider): chat/web-search/settings уже отдают структурированный JSON (без PNG)
+- Внешний доступ через Tailscale Funnel — инструкция в `docs/ops/tunnel.md`
 - ОТ2 ·½ remote-control endpoints — framework POST /action/* + ping готов; конкретные actions (tap, sendMessage, openSettings и т.д.) набираем после обсуждения в «Разработках»
 - ОТ3 ✓ auth-токен — 32-байтовый hex, заголовок X-Debug-Token / ?token=; публично только / и /ips
 - ОТ4  hot-reload дампа — принудительный дамп текущей ветки чата в inbox по запросу Claude
