@@ -55,6 +55,31 @@ void main() {
     expect(s.debugServerToken, '');
   });
 
+  test('copyFrom копирует ВСЕ поля — не забытое при добавлении', () {
+    // Регрессионный тест: был баг когда _copySettings в AppModel не копировал
+    // новые поля, из-за чего часть настроек не переживала перезапуск.
+    final src = GlobalSettings(
+      anthropicKey: 'a',
+      openAiKey: 'b',
+      deepSeekKey: 'c',
+      tavilyKey: 'd',
+      showBubbleTime: true,
+      showBubbleId: true,
+      hideThesisButton: true,
+      hideCompressButton: true,
+      debugServerEnabled: true,
+      debugServerPort: 12345,
+      debugServerToken: 'tok',
+      compactChat: true,
+      compactLines: 7,
+      defaultProvider: 'openai',
+    );
+    final dst = GlobalSettings();
+    dst.copyFrom(src);
+    // Сравнение через JSON гарантирует что каждое поле было скопировано.
+    expect(dst.toJson(), src.toJson());
+  });
+
   test('Settings backwards-compat: старый JSON без новых полей', () {
     // Симулируем сохранение из более старой версии приложения
     final oldJson = <String, dynamic>{

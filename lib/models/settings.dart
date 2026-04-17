@@ -138,4 +138,40 @@ class GlobalSettings {
         tokensInDeepseekTotal: j['tokensInDeepseekTotal'] as int? ?? 0,
         tokensOutDeepseekTotal: j['tokensOutDeepseekTotal'] as int? ?? 0,
       );
+
+  /// Копирует все поля из другого экземпляра.
+  /// Используется когда settings — final поле в AppModel и нельзя переназначить.
+  /// ВАЖНО: при добавлении новых полей — обновить здесь, иначе они не
+  /// подгружаются при рестарте приложения.
+  void copyFrom(GlobalSettings o) {
+    anthropicKey = o.anthropicKey;
+    openAiKey = o.openAiKey;
+    deepSeekKey = o.deepSeekKey;
+    tavilyKey = o.tavilyKey;
+    defaultSystemPrompt = o.defaultSystemPrompt;
+    useBuiltinSystemPrompt = o.useBuiltinSystemPrompt;
+    streamingMode = o.streamingMode;
+    showNodeLabels = o.showNodeLabels;
+    renderMarkdown = o.renderMarkdown;
+    hideEmoji = o.hideEmoji;
+    defaultProvider = o.defaultProvider;
+    defaultModel = o.defaultModel;
+    defaultMaxTokens = o.defaultMaxTokens;
+    defaultTemperature = o.defaultTemperature;
+    compactChat = o.compactChat;
+    compactLines = o.compactLines;
+    showBubbleTime = o.showBubbleTime;
+    showBubbleId = o.showBubbleId;
+    hideThesisButton = o.hideThesisButton;
+    hideCompressButton = o.hideCompressButton;
+    debugServerEnabled = o.debugServerEnabled;
+    debugServerPort = o.debugServerPort;
+    debugServerToken = o.debugServerToken;
+    tokensInAnthropicTotal = o.tokensInAnthropicTotal;
+    tokensOutAnthropicTotal = o.tokensOutAnthropicTotal;
+    tokensInOpenaiTotal = o.tokensInOpenaiTotal;
+    tokensOutOpenaiTotal = o.tokensOutOpenaiTotal;
+    tokensInDeepseekTotal = o.tokensInDeepseekTotal;
+    tokensOutDeepseekTotal = o.tokensOutDeepseekTotal;
+  }
 }

@@ -197,7 +197,7 @@ class AppModel extends ChangeNotifier {
       }
       final settingsRaw = _box.get('settings');
       if (settingsRaw != null) {
-        _copySettings(GlobalSettings.fromJson(
+        settings.copyFrom(GlobalSettings.fromJson(
             jsonDecode(settingsRaw) as Map<String, dynamic>));
       }
 
@@ -516,29 +516,7 @@ class AppModel extends ChangeNotifier {
 
   // ── Settings / export / import ─────────────────────────────────────────────
 
-  void _copySettings(GlobalSettings s) {
-    settings.anthropicKey = s.anthropicKey;
-    settings.openAiKey = s.openAiKey;
-    settings.deepSeekKey = s.deepSeekKey;
-    settings.defaultSystemPrompt = s.defaultSystemPrompt;
-    settings.useBuiltinSystemPrompt = s.useBuiltinSystemPrompt;
-    settings.streamingMode = s.streamingMode;
-    settings.showNodeLabels = s.showNodeLabels;
-    settings.renderMarkdown = s.renderMarkdown;
-    settings.hideEmoji = s.hideEmoji;
-    settings.defaultProvider = s.defaultProvider;
-    settings.defaultModel = s.defaultModel;
-    settings.defaultMaxTokens = s.defaultMaxTokens;
-    settings.defaultTemperature = s.defaultTemperature;
-    settings.compactChat = s.compactChat;
-    settings.compactLines = s.compactLines;
-    settings.tokensInAnthropicTotal = s.tokensInAnthropicTotal;
-    settings.tokensOutAnthropicTotal = s.tokensOutAnthropicTotal;
-    settings.tokensInOpenaiTotal = s.tokensInOpenaiTotal;
-    settings.tokensOutOpenaiTotal = s.tokensOutOpenaiTotal;
-    settings.tokensInDeepseekTotal = s.tokensInDeepseekTotal;
-    settings.tokensOutDeepseekTotal = s.tokensOutDeepseekTotal;
-  }
+  // _copySettings удалён — используется settings.copyFrom(...) напрямую.
 
   String exportJson() => jsonEncode({
         'version': 1,
@@ -581,7 +559,7 @@ class AppModel extends ChangeNotifier {
       _activeCanvasId = canvas.id;
     }
     final s = data['settings'] as Map<String, dynamic>?;
-    if (s != null) _copySettings(GlobalSettings.fromJson(s));
+    if (s != null) settings.copyFrom(GlobalSettings.fromJson(s));
     save();
     notifyListeners();
   }
