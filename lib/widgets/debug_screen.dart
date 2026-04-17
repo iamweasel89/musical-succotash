@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/app_model.dart';
 import '../services/debug_server.dart';
+import 'compress_sheet.dart';
 
 String _newToken() {
   final r = Random.secure();
@@ -191,8 +192,78 @@ class _DebugScreenState extends State<DebugScreen> {
             'Ключи API в /settings замаскированы. POST /action/* пока только ping — остальное обсуждаем в Разработках.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
+          const Divider(height: 32),
+          _CompressAnything(model: widget.model),
         ],
       ),
+    );
+  }
+}
+
+// ── Универсальный compress (ПТ3 расширено) ───────────────────────────────────
+
+class _CompressAnything extends StatefulWidget {
+  final AppModel model;
+  const _CompressAnything({required this.model});
+
+  @override
+  State<_CompressAnything> createState() => _CompressAnythingState();
+}
+
+class _CompressAnythingState extends State<_CompressAnything> {
+  final TextEditingController _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Сжать любой текст',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 8),
+        const Text(
+            'Вставь текст и открой compress-шторку. Использует LLM из дефолтных настроек.',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _ctrl,
+          minLines: 3,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            hintText: 'Вставь текст…',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.compress, size: 18),
+          label: const Text('Сжать…'),
+          onPressed: () {
+            final t = _ctrl.text.trim();
+            if (t.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Сначала вставь текст'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+              return;
+            }
+            openCompressSheet(
+              context,
+              text: t,
+              settings: widget.model.settings,
+            );
+          },
+        ),
+      ],
     );
   }
 }

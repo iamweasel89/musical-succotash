@@ -5,7 +5,7 @@ import '../models/app_model.dart';
 import '../models/settings.dart';
 import '../models/web_search_room.dart';
 import '../services/agent_runner.dart';
-import '../services/llm_transform.dart';
+import 'compress_sheet.dart';
 
 // ── Мастерская: Веб-поиск (ПО) ────────────────────────────────────────────────
 
@@ -311,13 +311,10 @@ class _MessageTile extends StatelessWidget {
               title: const Text('Сжать…'),
               onTap: () {
                 Navigator.pop(ctx);
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => _CompressSheet(
-                    text: message.text,
-                    settings: settings,
-                  ),
+                openCompressSheet(
+                  context,
+                  text: message.text,
+                  settings: settings,
                 );
               },
             ),
@@ -329,140 +326,6 @@ class _MessageTile extends StatelessWidget {
                 onDelete();
               },
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Compress sheet (ПТ3 частично) ────────────────────────────────────────────
-
-class _CompressSheet extends StatefulWidget {
-  final String text;
-  final GlobalSettings settings;
-  const _CompressSheet({required this.text, required this.settings});
-
-  @override
-  State<_CompressSheet> createState() => _CompressSheetState();
-}
-
-class _CompressSheetState extends State<_CompressSheet> {
-  int _n = 3;
-  bool _busy = false;
-  String? _result;
-  String? _error;
-
-  static const _options = [1, 3, 5, 10];
-
-  Future<void> _run() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final out = await compress(
-        text: widget.text,
-        n: _n,
-        settings: widget.settings,
-      );
-      if (!mounted) return;
-      setState(() {
-        _result = out;
-        _busy = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _busy = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Сжать текст',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            const Text('До скольких строк:',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              children: _options
-                  .map((n) => ChoiceChip(
-                        label: Text('$n'),
-                        selected: _n == n,
-                        onSelected: _busy
-                            ? null
-                            : (_) => setState(() => _n = n),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.compress, size: 18),
-                  label: Text(_busy ? 'Сжимаю…' : 'Сжать'),
-                  onPressed: _busy ? null : _run,
-                ),
-              ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text('Ошибка: $_error',
-                  style: const TextStyle(color: Colors.red, fontSize: 12)),
-            ],
-            if (_result != null) ...[
-              const SizedBox(height: 16),
-              const Text('Результат:',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SelectableText(_result!,
-                    style: const TextStyle(fontSize: 14)),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: const Text('Скопировать'),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: _result!));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Результат скопирован'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
           ],
         ),
       ),

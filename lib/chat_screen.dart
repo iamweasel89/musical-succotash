@@ -17,6 +17,7 @@ import 'models/thesis_entry.dart';
 import 'services/api_runner.dart';
 import 'services/dump_service.dart';
 import 'widgets/api_node_sheet.dart';
+import 'widgets/compress_sheet.dart';
 import 'widgets/excerpt_extractor.dart';
 import 'widgets/thesis_workshop_screen.dart';
 
@@ -465,6 +466,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _exitMarkup() => setState(() => _markupMode = false);
 
+  void _compressNode(Node node) {
+    openCompressSheet(
+      context,
+      text: node.text,
+      settings: widget.model.settings,
+      onApply: (result) {
+        final idx = widget.model.nodes.indexWhere((n) => n.id == node.id);
+        if (idx < 0) return;
+        widget.model.snapshot('Сжатие ноды');
+        widget.model.updateNode(node.copyWith(
+          text: result,
+          updatedAt: DateTime.now(),
+        ));
+      },
+    );
+  }
+
   void _copyNode(Node node) {
     final text = widget.model.settings.hideEmoji
         ? _stripEmoji(node.text)
@@ -800,6 +818,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ? () => _enterMarkup(node)
               : null,
           markupActive: _markupMode,
+          onCompress: node.text.isNotEmpty ? () => _compressNode(node) : null,
         );
       },
     );
@@ -937,6 +956,7 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onSettings;
   final VoidCallback? onDeleteBranch;
   final VoidCallback? onMarkup;
+  final VoidCallback? onCompress;
   final bool markupActive;
 
   const _ChatBubble({
@@ -959,6 +979,7 @@ class _ChatBubble extends StatelessWidget {
     this.onSettings,
     this.onDeleteBranch,
     this.onMarkup,
+    this.onCompress,
     this.markupActive = false,
   });
 
@@ -1061,6 +1082,7 @@ class _ChatBubble extends StatelessWidget {
               onSettings: onSettings,
               onDeleteBranch: onDeleteBranch,
               onMarkup: onMarkup,
+              onCompress: onCompress,
               markupActive: markupActive,
             ),
             if (showTime || showId)
@@ -1119,6 +1141,7 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback? onSettings;
   final VoidCallback? onDeleteBranch;
   final VoidCallback? onMarkup;
+  final VoidCallback? onCompress;
   final bool markupActive;
 
   const _ActionRow({
@@ -1129,6 +1152,7 @@ class _ActionRow extends StatelessWidget {
     this.onSettings,
     this.onDeleteBranch,
     this.onMarkup,
+    this.onCompress,
     this.markupActive = false,
   });
 
@@ -1155,6 +1179,8 @@ class _ActionRow extends StatelessWidget {
             onTap: onMarkup!,
             color: markupActive ? Colors.deepPurple[300] : null,
           ),
+        if (onCompress != null)
+          _Btn(icon: Icons.compress, tooltip: 'Сжать…', onTap: onCompress!),
       ],
     );
   }

@@ -156,7 +156,7 @@ lib/
 **ПТ — Преобразование текста** *(общий слой LLM-трансформаций: ядро для Я / БК3 / агента)*
 - ПТ1 ✓ ядро `services/llm_transform.dart` — функция `llmTransform(text, instruction, {maxTokens, temperature})`; поддерживает anthropic/openai/deepseek; выбор provider/model из `settings.defaultProvider/defaultModel` или override
 - ПТ2 ✓ пресеты — `compress(text, N)` / `tldr(text)` / `translate(text, lang)` / `rewriteFormal(text)` / `outline(text)`
-- ПТ3 частично — long-press на сообщении веб-поиска → «Сжать…» → чипы 1/3/5/10 → превью → копирование. Расширить на чат-пузыри, text-node-sheet, thesis-cards — отдельной задачей
+- ПТ3 ✓ compress-шторка доступна из нескольких мест: (а) long-press на сообщении веб-поиска → «Сжать…», (б) иконка compress в action-row чат-пузыря, (в) иконка compress рядом с формулировкой/ответом тезиса с применением результата, (г) универсальная панель «Сжать любой текст» в Мастерская → Отладка. Text-node-sheet пропущен — не используется; node_panel требует прокидывания settings от верхнего экрана, отдельной задачей.
 - ПТ4 ✓ агентский tool `llm_transform(instruction, text)` — агент может сжимать длинные результаты extract/crawl
 - ПТ5 миграция тезисов на пресеты — `thesisFormulate(excerpt)` и `thesisAnswer(thesis)` становятся тонкими обёртками над ПТ ядром
 - ПТ6 пользовательские пресеты — оператор добавляет свои инструкции в настройках (плейсхолдер `{text}`, опц. `{N}`)
