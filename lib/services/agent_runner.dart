@@ -10,7 +10,8 @@ import 'web_search.dart';
 // DeepSeek (function calling) через унифицированный `callLlm` из llm_client.
 // Цикл: запрос → если tool_use — выполнить tool → добавить результат → повторить.
 
-const _maxIterations = 6;
+const _maxIterations = 10;
+const _extractMaxChars = 3000;
 
 // Tool registry: name → (description, input_schema, handler).
 class _ToolDef {
@@ -118,7 +119,7 @@ final Map<String, _ToolDef> _tools = {
         final buf = StringBuffer();
         for (final r in results) {
           buf.writeln('--- ${r.url} ---');
-          buf.writeln(r.rawContent);
+          buf.writeln(_truncate(r.rawContent, _extractMaxChars));
           buf.writeln();
         }
         log?.call('  получено ${results.length} страниц');
@@ -155,7 +156,7 @@ final Map<String, _ToolDef> _tools = {
         final buf = StringBuffer();
         for (final r in results) {
           buf.writeln('--- ${r.url} ---');
-          buf.writeln(r.rawContent);
+          buf.writeln(_truncate(r.rawContent, _extractMaxChars));
           buf.writeln();
         }
         log?.call('  получено ${results.length}');
@@ -168,6 +169,17 @@ final Map<String, _ToolDef> _tools = {
     },
   ),
 };
+
+String _truncate(String s, int limit) {
+  if (s.length <= limit) return s;
+  return '${s.substring(0, limit)}… [обрезано ${s.length - limit} симв.]';
+}
+
+String _formatElapsed(Duration d) {
+  if (d.inSeconds < 1) return '${d.inMilliseconds}ms';
+  final sec = (d.inMilliseconds / 1000).toStringAsFixed(1);
+  return '${sec}s';
+}
 
 String _formatSearchResults(WebSearchResult r) {
   final buf = StringBuffer('Provider: ${r.provider.name}\n');
@@ -215,8 +227,10 @@ Future<AgentResult> runAgentTurn({
   final history = List<Map<String, dynamic>>.from(messages);
   int totalIn = 0;
   int totalOut = 0;
+  final turnStopwatch = Stopwatch()..start();
 
   for (var iter = 0; iter < _maxIterations; iter++) {
+    final llmSw = Stopwatch()..start();
     final response = await callLlm(
       provider: provider,
       model: model,
@@ -226,10 +240,16 @@ Future<AgentResult> runAgentTurn({
       tools: llmTools,
       maxTokens: 1024,
     );
+    llmSw.stop();
     totalIn += response.inputTokens;
     totalOut += response.outputTokens;
 
     if (response.toolCalls.isEmpty) {
+      turnStopwatch.stop();
+      onLog?.call(
+          '⏱ итого: ${_formatElapsed(turnStopwatch.elapsed)}, '
+          'итераций: ${iter + 1}, '
+          'токенов: $totalIn in / $totalOut out');
       return AgentResult(response.text, totalIn, totalOut);
     }
 
@@ -238,6 +258,7 @@ Future<AgentResult> runAgentTurn({
     for (final call in response.toolCalls) {
       final def = _tools[call.name];
       String resultText;
+      final toolSw = Stopwatch()..start();
       if (def == null) {
         resultText = 'Unknown tool: ${call.name}';
         onLog?.call('⚠ неизвестный tool: ${call.name}');
@@ -248,6 +269,8 @@ Future<AgentResult> runAgentTurn({
           resultText = 'Tool ${call.name} error: $e';
         }
       }
+      toolSw.stop();
+      onLog?.call('  ⏱ ${call.name}: ${_formatElapsed(toolSw.elapsed)}');
       history.add(toolResultMessage(
         provider: provider,
         toolUseId: call.id,
@@ -256,5 +279,27 @@ Future<AgentResult> runAgentTurn({
     }
   }
 
-  throw Exception('Агент превысил лимит итераций ($_maxIterations).');
+  // Fallback-синтез: лимит итераций исчерпан, делаем последний вызов без
+  // tools и просим финальный ответ на основе собранного контекста.
+  onLog?.call('⚠ лимит $_maxIterations итераций — форсирую синтез без tools');
+  final finalResponse = await callLlm(
+    provider: provider,
+    model: model,
+    key: key,
+    systemPrompt:
+        '$systemPrompt\n\nВажно: у тебя кончился бюджет на инструменты. '
+        'Дай итоговый ответ только на основе уже собранного в истории '
+        'контекста. Не пытайся вызывать tools.',
+    messages: history,
+    tools: const [],
+    maxTokens: 1024,
+  );
+  totalIn += finalResponse.inputTokens;
+  totalOut += finalResponse.outputTokens;
+  turnStopwatch.stop();
+  onLog?.call(
+      '⏱ итого: ${_formatElapsed(turnStopwatch.elapsed)}, '
+      'итераций: $_maxIterations + 1 синтез, '
+      'токенов: $totalIn in / $totalOut out');
+  return AgentResult(finalResponse.text, totalIn, totalOut);
 }
