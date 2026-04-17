@@ -9,17 +9,46 @@ class WebSearchDetailScreen extends StatelessWidget {
   final WebSearchMessage? query;
   final WebSearchMessage? answer;
 
+  /// Живые логи на момент открытия (когда сеанс ещё идёт и answer == null).
+  final List<String>? liveLogs;
+  final bool running;
+  final int? elapsedSeconds;
+
   const WebSearchDetailScreen({
     super.key,
     required this.query,
     required this.answer,
+    this.liveLogs,
+    this.running = false,
+    this.elapsedSeconds,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasProtocol = answer != null && answer!.logs.isNotEmpty;
+    final finalLogs = answer != null && answer!.logs.isNotEmpty;
+    final runningLogs =
+        running && liveLogs != null && liveLogs!.isNotEmpty;
     return Scaffold(
-      appBar: AppBar(title: const Text('Поиск')),
+      appBar: AppBar(
+        title: const Text('Поиск'),
+        actions: [
+          if (running && elapsedSeconds != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Text(
+                  '${elapsedSeconds}s',
+                  style: TextStyle(
+                    color: elapsedSeconds! > 60
+                        ? Colors.orange[700]
+                        : Colors.grey[700],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(12),
@@ -31,7 +60,14 @@ class WebSearchDetailScreen extends StatelessWidget {
                 icon: Icons.help_outline,
                 timestamp: query!.createdAt,
               ),
-            if (hasProtocol)
+            if (runningLogs)
+              _Section(
+                title: 'Протокол подготовки (идёт)',
+                text: liveLogs!.join('\n'),
+                icon: Icons.list_alt,
+                mono: true,
+              ),
+            if (finalLogs)
               _Section(
                 title: 'Протокол подготовки',
                 text: answer!.logs.join('\n'),
@@ -45,6 +81,18 @@ class WebSearchDetailScreen extends StatelessWidget {
                 icon: Icons.reply,
                 timestamp: answer!.createdAt,
                 status: answer!.status,
+              ),
+            if (running && answer == null && !runningLogs)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Text(
+                    'Агент работает, пока без сообщений в лог.\n'
+                    'Это ненормально если больше минуты — возможно, зависший HTTP.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ),
               ),
           ],
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 
 import '../models/app_model.dart';
 import '../models/screen_snapshot.dart';
@@ -27,6 +28,8 @@ class _WebSearchScreenState extends State<WebSearchScreen>
   final List<String> _liveLogs = [];
   int _visibleFirst = 0;
   int _visibleLast = 0;
+  DateTime? _busyStartAt;
+  Timer? _elapsedTicker;
 
   AppModel get _m => widget.model;
   List<WebSearchMessage> get _msgs => _m.webSearchMessages;
@@ -43,6 +46,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
   void dispose() {
     _m.popScreen();
     _scroll.removeListener(_updateVisibleRange);
+    _elapsedTicker?.cancel();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -116,6 +120,24 @@ class _WebSearchScreenState extends State<WebSearchScreen>
     });
   }
 
+  void _startElapsedTicker() {
+    _elapsedTicker?.cancel();
+    _elapsedTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {}); // просто ребилд для обновления отображаемых секунд
+    });
+  }
+
+  void _stopElapsedTicker() {
+    _elapsedTicker?.cancel();
+    _elapsedTicker = null;
+  }
+
+  int? _busyElapsedSeconds() {
+    if (_busyStartAt == null) return null;
+    return DateTime.now().difference(_busyStartAt!).inSeconds;
+  }
+
   Future<void> _send() async {
     final query = _input.text.trim();
     if (query.isEmpty || _busy) return;
@@ -124,8 +146,10 @@ class _WebSearchScreenState extends State<WebSearchScreen>
       _msgs.add(WebSearchMessage(role: 'user', text: query));
       _input.clear();
       _busy = true;
+      _busyStartAt = DateTime.now();
       _liveLogs.clear();
     });
+    _startElapsedTicker();
     _m.notifyWebSearchChanged();
     _scrollToEnd();
 
@@ -149,6 +173,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
       );
 
       if (!mounted) return;
+      _stopElapsedTicker();
       setState(() {
         _msgs.add(WebSearchMessage(
           role: 'assistant',
@@ -158,6 +183,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
         ));
         _liveLogs.clear();
         _busy = false;
+        _busyStartAt = null;
       });
       _m.addTokenUsage(_cfg.provider, result.inputTokens, result.outputTokens,
           context: 'web-search');
@@ -165,6 +191,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
       _scrollToEnd();
     } catch (e) {
       if (!mounted) return;
+      _stopElapsedTicker();
       setState(() {
         _msgs.add(WebSearchMessage(
           role: 'assistant',
@@ -174,6 +201,7 @@ class _WebSearchScreenState extends State<WebSearchScreen>
         ));
         _liveLogs.clear();
         _busy = false;
+        _busyStartAt = null;
       });
       _m.notifyWebSearchChanged();
       _scrollToEnd();
@@ -305,10 +333,15 @@ class _WebSearchScreenState extends State<WebSearchScreen>
                     session: s,
                     running: isRunning,
                     liveLogs: isRunning ? _liveLogs : const [],
+                    elapsedSeconds: isRunning ? _busyElapsedSeconds() : null,
                     onOpen: () => Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => WebSearchDetailScreen(
                         query: s.query,
                         answer: s.answer,
+                        liveLogs: isRunning ? List<String>.from(_liveLogs) : null,
+                        running: isRunning,
+                        elapsedSeconds:
+                            isRunning ? _busyElapsedSeconds() : null,
                       ),
                     )),
                     onDelete: () => _deleteSession(s),
@@ -356,6 +389,7 @@ class _SessionCard extends StatelessWidget {
   final _Session session;
   final bool running;
   final List<String> liveLogs;
+  final int? elapsedSeconds;
   final VoidCallback onOpen;
   final VoidCallback onDelete;
   final GlobalSettings settings;
@@ -364,6 +398,7 @@ class _SessionCard extends StatelessWidget {
     required this.session,
     required this.running,
     required this.liveLogs,
+    required this.elapsedSeconds,
     required this.onOpen,
     required this.onDelete,
     required this.settings,
@@ -433,6 +468,19 @@ class _SessionCard extends StatelessWidget {
                     style:
                         TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
+                  if (running && elapsedSeconds != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${elapsedSeconds}s',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: elapsedSeconds! > 60
+                            ? Colors.orange[700]
+                            : Colors.grey[600],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   const Spacer(),
                   Text(
                     '#${q.id.substring(0, 6)}',
