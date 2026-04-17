@@ -3,6 +3,8 @@ name: Build
 on:
   push:
     branches: ["**"]
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
     inputs:
       force_release:
