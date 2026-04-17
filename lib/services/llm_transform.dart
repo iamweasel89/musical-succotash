@@ -8,7 +8,16 @@ import 'llm_client.dart';
 //
 // Идёт через унифицированный `callLlm` (Р2) — один код на три провайдера.
 
-Future<String> llmTransform({
+class LlmTransformResult {
+  final String text;
+  final int inputTokens;
+  final int outputTokens;
+  const LlmTransformResult(this.text, this.inputTokens, this.outputTokens);
+}
+
+/// Полная версия — возвращает текст + расход токенов. Нужно агенту для
+/// учёта в счётчиках использования.
+Future<LlmTransformResult> llmTransformFull({
   required String text,
   required String instruction,
   required GlobalSettings settings,
@@ -17,7 +26,9 @@ Future<String> llmTransform({
   int maxTokens = 1024,
   double temperature = 0.3,
 }) async {
-  if (text.trim().isEmpty) return '';
+  if (text.trim().isEmpty) {
+    return const LlmTransformResult('', 0, 0);
+  }
   final provider = providerOverride ?? settings.defaultProvider;
   final model = modelOverride ?? settings.defaultModel;
   final key = keyForProvider(provider, settings);
@@ -44,7 +55,29 @@ Future<String> llmTransform({
     maxTokens: maxTokens,
     temperature: temperature,
   );
-  return result.text;
+  return LlmTransformResult(result.text, result.inputTokens, result.outputTokens);
+}
+
+/// Тонкая обёртка — только текст. Для UI-пресетов, им токены не нужны.
+Future<String> llmTransform({
+  required String text,
+  required String instruction,
+  required GlobalSettings settings,
+  String? providerOverride,
+  String? modelOverride,
+  int maxTokens = 1024,
+  double temperature = 0.3,
+}) async {
+  final r = await llmTransformFull(
+    text: text,
+    instruction: instruction,
+    settings: settings,
+    providerOverride: providerOverride,
+    modelOverride: modelOverride,
+    maxTokens: maxTokens,
+    temperature: temperature,
+  );
+  return r.text;
 }
 
 // ── Пресеты (ПТ2) ────────────────────────────────────────────────────────────

@@ -14,11 +14,16 @@ const _maxIterations = 10;
 const _extractMaxChars = 3000;
 
 // Tool registry: name → (description, input_schema, handler).
+// Handler принимает onTokens callback чтобы учитывать внутренние LLM-вызовы
+// (например llm_transform tool делает собственный callLlm — токены надо
+// передать наверх в AgentResult).
+typedef TokensCallback = void Function(int inTok, int outTok);
+
 class _ToolDef {
   final String description;
   final Map<String, dynamic> schema;
   final Future<String> Function(Map<String, dynamic> args, GlobalSettings s,
-      AgentLogger? log) handler;
+      AgentLogger? log, TokensCallback? onTokens) handler;
   const _ToolDef(this.description, this.schema, this.handler);
 }
 
@@ -32,7 +37,7 @@ final Map<String, _ToolDef> _tools = {
       },
       'required': ['query'],
     },
-    (args, s, log) async {
+    (args, s, log, onTokens) async {
       final query = (args['query'] as String?)?.trim() ?? '';
       if (query.isEmpty) return 'Empty query.';
       log?.call('🔍 web_search: «$query»');
@@ -67,7 +72,7 @@ final Map<String, _ToolDef> _tools = {
       },
       'required': ['text', 'instruction'],
     },
-    (args, s, log) async {
+    (args, s, log, onTokens) async {
       final text = (args['text'] as String?) ?? '';
       final instruction = (args['instruction'] as String?) ?? '';
       if (text.trim().isEmpty || instruction.trim().isEmpty) {
@@ -75,11 +80,13 @@ final Map<String, _ToolDef> _tools = {
       }
       log?.call('✎ llm_transform: $instruction');
       try {
-        return await llmTransform(
+        final r = await llmTransformFull(
           text: text,
           instruction: instruction,
           settings: s,
         );
+        onTokens?.call(r.inputTokens, r.outputTokens);
+        return r.text;
       } catch (e) {
         return 'Transform failed: $e';
       }
@@ -103,7 +110,7 @@ final Map<String, _ToolDef> _tools = {
       },
       'required': ['url'],
     },
-    (args, s, log) async {
+    (args, s, log, onTokens) async {
       final url = (args['url'] as String?)?.trim() ?? '';
       if (url.isEmpty) return 'Empty url.';
       final depth = args['max_depth'] is int ? args['max_depth'] as int : 1;
@@ -145,7 +152,7 @@ final Map<String, _ToolDef> _tools = {
       },
       'required': ['urls'],
     },
-    (args, s, log) async {
+    (args, s, log, onTokens) async {
       final raw = args['urls'];
       final urls = raw is List ? raw.whereType<String>().toList() : <String>[];
       if (urls.isEmpty) return 'Empty urls.';
@@ -264,7 +271,11 @@ Future<AgentResult> runAgentTurn({
         onLog?.call('⚠ неизвестный tool: ${call.name}');
       } else {
         try {
-          resultText = await def.handler(call.input, settings, onLog);
+          resultText = await def.handler(call.input, settings, onLog,
+              (inT, outT) {
+            totalIn += inT;
+            totalOut += outT;
+          });
         } catch (e) {
           resultText = 'Tool ${call.name} error: $e';
         }

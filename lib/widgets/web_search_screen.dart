@@ -87,7 +87,8 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
         _liveLogs.clear();
         _busy = false;
       });
-      _m.addTokenUsage(_cfg.provider, result.inputTokens, result.outputTokens);
+      _m.addTokenUsage(_cfg.provider, result.inputTokens, result.outputTokens,
+          context: 'web-search');
       _m.notifyWebSearchChanged();
       _scrollToEnd();
     } catch (e) {

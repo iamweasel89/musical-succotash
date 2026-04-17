@@ -185,7 +185,8 @@ class _SettingsSheetState extends State<SettingsSheet> {
             ],
 
             const Divider(height: 24),
-            UsageSection(settings: s, onReset: _resetTokenUsage),
+            UsageSection(
+                model: widget.model, settings: s, onReset: _resetTokenUsage),
           ],
         ),
       ),

@@ -422,7 +422,9 @@ class _ChatScreenState extends State<ChatScreen> {
       onComplete: (result, stats) {
         if (!mounted) return;
         widget.model.updateNode(apiNode.copyWith(status: NodeStatus.done, text: result));
-        widget.model.addTokenUsage(apiSettings.provider, stats.inputTokens, stats.outputTokens);
+        widget.model.addTokenUsage(apiSettings.provider, stats.inputTokens,
+            stats.outputTokens,
+            context: 'chat');
         _scrollToBottom();
       },
       onError: (error) {

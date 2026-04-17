@@ -11,6 +11,7 @@ import 'node.dart';
 import 'reminder.dart';
 import 'settings.dart';
 import 'thesis_entry.dart';
+import 'usage_event.dart';
 import 'web_search_room.dart';
 
 // ── History entry ──────────────────────────────────────────────────────────
@@ -76,6 +77,10 @@ class AppModel extends ChangeNotifier {
   // ── Напоминания (ВР4) ─────────────────────────────────────────────────────
   final List<Reminder> reminders = [];
   void notifyRemindersChanged() { save(); notifyListeners(); }
+
+  // ── Журнал использования LLM ──────────────────────────────────────────────
+  final List<UsageEvent> recentUsage = [];
+  static const _maxRecentUsage = 100;
 
   Future<void> _seedDecisions() async {
     try {
@@ -262,6 +267,15 @@ class AppModel extends ChangeNotifier {
         );
       }
 
+      // Load recent usage
+      final usageRaw = _box.get('recentUsage');
+      if (usageRaw != null) {
+        recentUsage.addAll(
+          (jsonDecode(usageRaw) as List)
+              .map((j) => UsageEvent.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+
       // First run or migration: create default canvas from existing data
       if (canvases.isEmpty) {
         final canvas = CanvasData(
@@ -301,6 +315,8 @@ class AppModel extends ChangeNotifier {
       await _box.put('webSearchConfig', jsonEncode(webSearchConfig.toJson()));
       await _box.put('reminders',
           jsonEncode(reminders.map((r) => r.toJson()).toList()));
+      await _box.put('recentUsage',
+          jsonEncode(recentUsage.map((u) => u.toJson()).toList()));
     } catch (_) {}
   }
 
@@ -590,7 +606,8 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addTokenUsage(String provider, int input, int output) {
+  void addTokenUsage(String provider, int input, int output,
+      {String context = 'chat'}) {
     switch (provider) {
       case 'anthropic':
         settings.tokensInAnthropicTotal += input;
@@ -602,6 +619,18 @@ class AppModel extends ChangeNotifier {
         settings.tokensInDeepseekTotal += input;
         settings.tokensOutDeepseekTotal += output;
     }
+    // Журнал последних N событий
+    recentUsage.add(UsageEvent(
+      provider: provider,
+      inputTokens: input,
+      outputTokens: output,
+      cost: calculateCost(provider, input, output),
+      timestamp: DateTime.now(),
+      context: context,
+    ));
+    if (recentUsage.length > _maxRecentUsage) {
+      recentUsage.removeRange(0, recentUsage.length - _maxRecentUsage);
+    }
     save();
   }
 
@@ -612,6 +641,12 @@ class AppModel extends ChangeNotifier {
     settings.tokensOutOpenaiTotal = 0;
     settings.tokensInDeepseekTotal = 0;
     settings.tokensOutDeepseekTotal = 0;
+    save();
+    notifyListeners();
+  }
+
+  void clearRecentUsage() {
+    recentUsage.clear();
     save();
     notifyListeners();
   }
