@@ -17,6 +17,107 @@ class ThesisDump {
   const ThesisDump({required this.sourceNodeId, required this.excerpt, required this.thesis, required this.answer});
 }
 
+// ── Результат поиска по дампам ─────────────────────────────────────────────
+
+class DumpMatch {
+  final String filename;
+  final DateTime timestamp;
+  final String snippet;
+  final int score;
+  const DumpMatch({
+    required this.filename,
+    required this.timestamp,
+    required this.snippet,
+    required this.score,
+  });
+}
+
+/// Ищет подстроку (case-insensitive) по всем дампам в inbox.
+/// Возвращает отсортированный по релевантности + свежести список.
+Future<List<DumpMatch>> searchDumps(String query, {int limit = 5}) async {
+  if (query.trim().isEmpty) return const [];
+  final dir = await DumpService._inboxDir();
+  if (!dir.existsSync()) return const [];
+
+  final q = query.toLowerCase();
+  final matches = <DumpMatch>[];
+
+  for (final entity in dir.listSync()) {
+    if (entity is! File) continue;
+    if (!entity.path.endsWith('.md')) continue;
+
+    String content;
+    try {
+      content = await entity.readAsString();
+    } catch (_) {
+      continue;
+    }
+    final lower = content.toLowerCase();
+    final firstIdx = lower.indexOf(q);
+    if (firstIdx < 0) continue;
+
+    // Count occurrences
+    int count = 0;
+    int pos = 0;
+    while (true) {
+      final idx = lower.indexOf(q, pos);
+      if (idx < 0) break;
+      count++;
+      pos = idx + q.length;
+    }
+
+    // Snippet ±100 chars around first match
+    final start = (firstIdx - 100).clamp(0, content.length);
+    final end = (firstIdx + q.length + 100).clamp(0, content.length);
+    final snippet = content.substring(start, end).replaceAll('\n', ' ').trim();
+
+    // Timestamp из имени YYYYMMDD-HHmmss-dump.md или из mtime
+    final filename = entity.uri.pathSegments.last;
+    DateTime ts;
+    final m = RegExp(r'(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})')
+        .firstMatch(filename);
+    if (m != null) {
+      ts = DateTime(
+        int.parse(m.group(1)!),
+        int.parse(m.group(2)!),
+        int.parse(m.group(3)!),
+        int.parse(m.group(4)!),
+        int.parse(m.group(5)!),
+        int.parse(m.group(6)!),
+      );
+    } else {
+      ts = entity.statSync().modified;
+    }
+
+    matches.add(DumpMatch(
+      filename: filename,
+      timestamp: ts,
+      snippet: snippet,
+      score: count,
+    ));
+  }
+
+  // Сортировка: по score убыванию, затем по timestamp убыванию
+  matches.sort((a, b) {
+    final c = b.score.compareTo(a.score);
+    return c != 0 ? c : b.timestamp.compareTo(a.timestamp);
+  });
+  return matches.take(limit).toList();
+}
+
+/// Читает содержимое одного дампа по имени файла. null если не найден.
+Future<String?> readDump(String filename) async {
+  final dir = await DumpService._inboxDir();
+  if (!dir.existsSync()) return null;
+  final file = File('${dir.path}/$filename');
+  if (!file.existsSync()) return null;
+  try {
+    return await file.readAsString();
+  } catch (_) {
+    return null;
+  }
+}
+
 class DumpService {
   static Future<File> saveDump({
     required List<Map<String, dynamic>> messages,
@@ -47,7 +148,7 @@ class DumpService {
       final content = (msg['content'] as String? ?? '').trim();
       if (content.isEmpty) continue;
       final label = role == 'user' ? '**Оператор**' : '**LLM**';
-      buf.writeln('$label');
+      buf.writeln(label);
       buf.writeln();
       buf.writeln(content);
       buf.writeln();
