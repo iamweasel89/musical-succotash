@@ -7,7 +7,7 @@ import '../models/thesis_entry.dart';
 import '../services/api_runner.dart';
 import '../services/dump_service.dart';
 import 'api_node_sheet.dart';
-import 'compress_sheet.dart';
+import 'shared/compress_sheet.dart';
 
 // ── Мастерская: Режим тезисов (Я1–Я8) ────────────────────────────────────────
 

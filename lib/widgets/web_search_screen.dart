@@ -5,7 +5,7 @@ import '../models/app_model.dart';
 import '../models/settings.dart';
 import '../models/web_search_room.dart';
 import '../services/agent_runner.dart';
-import 'compress_sheet.dart';
+import 'shared/compress_sheet.dart';
 
 // ── Мастерская: Веб-поиск (ПО) ────────────────────────────────────────────────
 

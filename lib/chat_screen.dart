@@ -17,7 +17,7 @@ import 'models/thesis_entry.dart';
 import 'services/api_runner.dart';
 import 'services/dump_service.dart';
 import 'widgets/api_node_sheet.dart';
-import 'widgets/compress_sheet.dart';
+import 'widgets/shared/compress_sheet.dart';
 import 'widgets/excerpt_extractor.dart';
 import 'widgets/thesis_workshop_screen.dart';
 

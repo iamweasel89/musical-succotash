@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/app_model.dart';
 import '../services/debug_server.dart';
-import 'compress_sheet.dart';
+import 'shared/compress_sheet.dart';
 
 String _newToken() {
   final r = Random.secure();
