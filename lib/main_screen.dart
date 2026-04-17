@@ -49,11 +49,22 @@ class _MainScreenState extends State<MainScreen> {
       widget.model.setBaseScreen(idx == 0 ? 'chat' : 'canvas');
       return {'done': true, 'tab': idx};
     });
+    DebugServer.registerAction('ui.popToRoot', (model, args) async {
+      if (!mounted) return {'done': false, 'reason': 'not mounted'};
+      final nav = Navigator.of(context);
+      int popped = 0;
+      while (nav.canPop()) {
+        nav.pop();
+        popped++;
+      }
+      return {'done': true, 'popped': popped, 'currentScreen': model.currentScreen};
+    });
   }
 
   @override
   void dispose() {
     DebugServer.unregisterAction('ui.switchTab');
+    DebugServer.unregisterAction('ui.popToRoot');
     super.dispose();
   }
 

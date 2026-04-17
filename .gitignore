@@ -32,3 +32,6 @@ ios/Pods/
 
 # Logs
 *.log
+
+# Queue-mode marker for stop-hook-git-check (см. CLAUDE.md)
+.git-queue
