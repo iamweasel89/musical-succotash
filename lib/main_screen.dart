@@ -31,6 +31,30 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     widget.model.setBaseScreen(_tab == 0 ? 'chat' : 'canvas');
+    DebugServer.registerAction('ui.switchTab', (model, args) async {
+      final tab = args['tab'];
+      int idx;
+      if (tab is int) {
+        idx = tab;
+      } else if (tab is String) {
+        idx = tab == 'canvas' ? 1 : 0;
+      } else {
+        return {'done': false, 'reason': 'tab: int or "chat"|"canvas"'};
+      }
+      if (idx != 0 && idx != 1) {
+        return {'done': false, 'reason': 'tab must be 0 or 1'};
+      }
+      if (!mounted) return {'done': false, 'reason': 'not mounted'};
+      setState(() => _tab = idx);
+      widget.model.setBaseScreen(idx == 0 ? 'chat' : 'canvas');
+      return {'done': true, 'tab': idx};
+    });
+  }
+
+  @override
+  void dispose() {
+    DebugServer.unregisterAction('ui.switchTab');
+    super.dispose();
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────

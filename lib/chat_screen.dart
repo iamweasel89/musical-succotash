@@ -16,6 +16,7 @@ import 'models/node.dart';
 import 'models/screen_snapshot.dart';
 import 'models/thesis_entry.dart';
 import 'services/api_runner.dart';
+import 'services/debug_server.dart';
 import 'services/dump_service.dart';
 import 'widgets/api_node_sheet.dart';
 import 'widgets/shared/compress_sheet.dart';
@@ -74,6 +75,68 @@ class _ChatScreenState extends State<ChatScreen>
     _globalCollapse = widget.model.settings.compactChat;
     widget.model.registerBaseProvider(this);
     _scrollCtrl.addListener(_updateVisibleRange);
+    DebugServer.registerAction('chat.addNote', (model, args) async {
+      final text = (args['text'] as String?)?.trim() ?? '';
+      if (text.isEmpty) return {'done': false, 'reason': 'empty text'};
+      final node = _appendTextNote(text);
+      return {
+        'done': true,
+        'nodeId': node.id,
+        'chainLength': _chainPath.length,
+      };
+    });
+    DebugServer.registerAction('chat.setChainPath', (model, args) async {
+      final raw = args['chainPath'];
+      if (raw is! List) {
+        return {'done': false, 'reason': 'chainPath must be list of node ids'};
+      }
+      final ids = raw.whereType<String>().toList();
+      // Проверяем, что все ноды существуют.
+      for (final id in ids) {
+        if (model.nodeById(id) == null) {
+          return {'done': false, 'reason': 'unknown node: $id'};
+        }
+      }
+      model.snapshot('Claude set chainPath');
+      setState(() {
+        _chainPath
+          ..clear()
+          ..addAll(ids);
+      });
+      _saveChain();
+      return {'done': true, 'chainLength': _chainPath.length};
+    });
+  }
+
+  // Добавляет текст-ноду в конец chainPath (без api-ноды, LLM не дёргается).
+  // Используется action'ом chat.addNote — Claude постит заметку.
+  Node _appendTextNote(String text) {
+    widget.model.snapshot('Claude добавил заметку');
+    final HexPos pos;
+    final int dir;
+    if (_chainPath.isEmpty) {
+      pos = const HexPos(0, 0);
+      dir = 0;
+    } else {
+      final lastNode = widget.model.nodeById(_chainPath.last)!;
+      final slot = _continuationSlot(lastNode);
+      pos = slot.pos;
+      dir = slot.dir;
+    }
+    final node = Node(
+      type: NodeType.text,
+      position: pos,
+      text: text,
+      growthDir: dir,
+    );
+    widget.model.addNode(node);
+    if (_chainPath.isNotEmpty) {
+      widget.model.addEdge(Edge(fromId: _chainPath.last, toId: node.id));
+    }
+    setState(() => _chainPath.add(node.id));
+    _saveChain();
+    _scrollToBottom();
+    return node;
   }
 
   void _updateVisibleRange() {
@@ -166,6 +229,8 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   void dispose() {
+    DebugServer.unregisterAction('chat.addNote');
+    DebugServer.unregisterAction('chat.setChainPath');
     widget.model.clearBaseProvider(this);
     _scrollCtrl.removeListener(_updateVisibleRange);
     _inputCtrl.dispose();

@@ -182,11 +182,36 @@ class DebugServer {
     }
   }
 
-  /// Registry of POST /action/* handlers. Empty by default — concrete actions
-  /// are added after MVP discussion in Мастерская → Разработки.
+  /// Registry of POST /action/* handlers. Часть — модельного уровня
+  /// (всегда доступны), часть — регистрируется из initState экранов
+  /// через registerAction/unregisterAction.
   static final Map<String, Future<Object?> Function(AppModel, Map<String, dynamic>)>
       _actions = {
-    'ping': (model, args) async => {'pong': DateTime.now().toIso8601String(), 'echo': args},
+    'ping': (model, args) async =>
+        {'pong': DateTime.now().toIso8601String(), 'echo': args},
+    // ── Модельные actions (всегда доступны) ──────────────────────────────────
+    'canvas.undo': (model, args) async {
+      if (!model.canUndo) return {'done': false, 'reason': 'nothing to undo'};
+      model.undo();
+      return {'done': true, 'canUndo': model.canUndo, 'canRedo': model.canRedo};
+    },
+    'canvas.redo': (model, args) async {
+      if (!model.canRedo) return {'done': false, 'reason': 'nothing to redo'};
+      model.redo();
+      return {'done': true, 'canUndo': model.canUndo, 'canRedo': model.canRedo};
+    },
+    'actions.list': (model, args) async =>
+        {'actions': DebugServer.listActions()},
+    'canvas.deleteNode': (model, args) async {
+      final id = (args['nodeId'] as String?)?.trim() ?? '';
+      if (id.isEmpty) return {'done': false, 'reason': 'nodeId required'};
+      if (model.nodeById(id) == null) {
+        return {'done': false, 'reason': 'unknown nodeId'};
+      }
+      model.snapshot('Claude удалил ноду');
+      model.removeNodes({id});
+      return {'done': true, 'deleted': id};
+    },
   };
 
   /// External registrar — UI layers call this to expose actions.
