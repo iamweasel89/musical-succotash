@@ -9,12 +9,17 @@ String _newId() {
 class WebSearchMessage {
   final String id;
   final String role; // 'user' | 'assistant'
-  final String text;
-  final List<String> logs;
+  String text;
+  List<String> logs;
   final DateTime createdAt;
-  /// Статус исполнения: null/'ok' — нормально, 'limit' — упёрся в лимит
-  /// итераций и делал fallback-синтез, 'error' — исключение.
-  final String? status;
+
+  /// State-machine сеанса (только для assistant-сообщений):
+  ///   'running'     — агент сейчас работает
+  ///   'success'     — завершился нормально (также null / 'ok' для обратной совместимости)
+  ///   'limit'       — упёрся в лимит итераций, сделал fallback-синтез
+  ///   'error'       — исключение, текст ошибки в field text
+  ///   'interrupted' — процесс был прерван (orphan detection при старте)
+  String? status;
 
   WebSearchMessage({
     String? id,
@@ -24,7 +29,7 @@ class WebSearchMessage {
     DateTime? createdAt,
     this.status,
   })  : id = id ?? _newId(),
-        logs = logs ?? const [],
+        logs = logs ?? <String>[],
         createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -40,7 +45,7 @@ class WebSearchMessage {
         id: j['id'] as String?,
         role: j['role'] as String? ?? 'user',
         text: j['text'] as String? ?? '',
-        logs: (j['logs'] as List?)?.cast<String>() ?? const [],
+        logs: (j['logs'] as List?)?.cast<String>() ?? <String>[],
         createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ??
             DateTime.now(),
         status: j['status'] as String?,

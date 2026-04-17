@@ -84,13 +84,17 @@ class _WebSearchScreenState extends State<WebSearchScreen>
       final s = sessions[i];
       final qText = s.query.text;
       final aText = s.answer?.text ?? '';
+      final status = s.answer?.status;
+      final completed = status != null &&
+          status != 'running' &&
+          status != 'interrupted';
       items.add({
         'index': i,
         'queryId': s.query.id,
         'queryPreview':
             qText.length > 160 ? '${qText.substring(0, 160)}…' : qText,
-        'answered': s.answer != null,
-        'answerStatus': s.answer?.status,
+        'answered': completed,
+        'answerStatus': status,
         'answerPreview':
             aText.length > 160 ? '${aText.substring(0, 160)}…' : aText,
         'createdAt': s.query.createdAt.toIso8601String(),
@@ -138,13 +142,24 @@ class _WebSearchScreenState extends State<WebSearchScreen>
     return DateTime.now().difference(_busyStartAt!).inSeconds;
   }
 
-  Future<void> _send() async {
-    final query = _input.text.trim();
+  Future<void> _send({String? retryQuery}) async {
+    final query = retryQuery ?? _input.text.trim();
     if (query.isEmpty || _busy) return;
 
+    // Сразу создаём assistant со status='running'. Объект живёт в AppModel —
+    // если виджет будет unmounted, мы всё равно обновим эту же ссылку
+    // (и сохраним через notifyWebSearchChanged).
+    final assistant = WebSearchMessage(
+      role: 'assistant',
+      text: '',
+      status: 'running',
+    );
     setState(() {
-      _msgs.add(WebSearchMessage(role: 'user', text: query));
-      _input.clear();
+      if (retryQuery == null) {
+        _msgs.add(WebSearchMessage(role: 'user', text: query));
+        _input.clear();
+      }
+      _msgs.add(assistant);
       _busy = true;
       _busyStartAt = DateTime.now();
       _liveLogs.clear();
@@ -153,8 +168,11 @@ class _WebSearchScreenState extends State<WebSearchScreen>
     _m.notifyWebSearchChanged();
     _scrollToEnd();
 
+    // Контекст запроса — все user/assistant сообщения КРОМЕ только что
+    // добавленного пустого assistant'а.
     final apiMessages = _msgs
-        .where((m) => m.role == 'user' || m.role == 'assistant')
+        .where((m) =>
+            (m.role == 'user' || m.role == 'assistant') && m.id != assistant.id)
         .map((m) => <String, dynamic>{'role': m.role, 'content': m.text})
         .toList();
 
@@ -166,43 +184,46 @@ class _WebSearchScreenState extends State<WebSearchScreen>
         model: _cfg.model,
         settings: _m.settings,
         onLog: (line) {
-          if (!mounted) return;
-          setState(() => _liveLogs.add(line));
-          _scrollToEnd();
+          assistant.logs.add(line);
+          if (mounted) {
+            setState(() => _liveLogs.add(line));
+            _scrollToEnd();
+          }
+          _m.notifyWebSearchChanged();
         },
       );
 
-      if (!mounted) return;
+      assistant.text = result.text.isEmpty ? '(пустой ответ)' : result.text;
+      assistant.status = result.status == 'limit' ? 'limit' : 'success';
       _stopElapsedTicker();
-      setState(() {
-        _msgs.add(WebSearchMessage(
-          role: 'assistant',
-          text: result.text.isEmpty ? '(пустой ответ)' : result.text,
-          logs: List<String>.from(_liveLogs),
-          status: result.status,
-        ));
-        _liveLogs.clear();
+      if (mounted) {
+        setState(() {
+          _liveLogs.clear();
+          _busy = false;
+          _busyStartAt = null;
+        });
+      } else {
         _busy = false;
         _busyStartAt = null;
-      });
+      }
       _m.addTokenUsage(_cfg.provider, result.inputTokens, result.outputTokens,
           context: 'web-search');
       _m.notifyWebSearchChanged();
       _scrollToEnd();
     } catch (e) {
-      if (!mounted) return;
+      assistant.text = 'Ошибка: $e';
+      assistant.status = 'error';
       _stopElapsedTicker();
-      setState(() {
-        _msgs.add(WebSearchMessage(
-          role: 'assistant',
-          text: 'Ошибка: $e',
-          logs: List<String>.from(_liveLogs),
-          status: 'error',
-        ));
-        _liveLogs.clear();
+      if (mounted) {
+        setState(() {
+          _liveLogs.clear();
+          _busy = false;
+          _busyStartAt = null;
+        });
+      } else {
         _busy = false;
         _busyStartAt = null;
-      });
+      }
       _m.notifyWebSearchChanged();
       _scrollToEnd();
     }
@@ -282,6 +303,19 @@ class _WebSearchScreenState extends State<WebSearchScreen>
     return out;
   }
 
+  // Повторить сеанс (interrupted / error): удалить старый assistant и
+  // запустить _send с тем же текстом. User-сообщение переиспользуем.
+  void _retrySession(_Session s) {
+    if (_busy) return;
+    if (s.answer != null) {
+      setState(() {
+        _msgs.removeWhere((m) => m.id == s.answer!.id);
+      });
+      _m.notifyWebSearchChanged();
+    }
+    _send(retryQuery: s.query.text);
+  }
+
   // Удалить сеанс целиком (запрос + ответ если есть).
   void _deleteSession(_Session s) {
     setState(() {
@@ -327,18 +361,30 @@ class _WebSearchScreenState extends State<WebSearchScreen>
                 itemCount: reversed.length,
                 itemBuilder: (ctx, i) {
                   final s = reversed[i];
-                  final isRunning =
-                      _busy && i == 0 && s.answer == null;
+                  final isRunning = s.answer?.status == 'running';
+                  final isRetryable = s.answer?.status == 'interrupted' ||
+                      s.answer?.status == 'error';
                   return _SessionCard(
                     session: s,
                     running: isRunning,
-                    liveLogs: isRunning ? _liveLogs : const [],
+                    liveLogs: isRunning
+                        ? (s.answer?.logs.isNotEmpty == true
+                            ? s.answer!.logs
+                            : _liveLogs)
+                        : const [],
                     elapsedSeconds: isRunning ? _busyElapsedSeconds() : null,
+                    retryable: isRetryable,
+                    onRetry: isRetryable ? () => _retrySession(s) : null,
                     onOpen: () => Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => WebSearchDetailScreen(
                         query: s.query,
                         answer: s.answer,
-                        liveLogs: isRunning ? List<String>.from(_liveLogs) : null,
+                        liveLogs: isRunning
+                            ? List<String>.from(
+                                s.answer?.logs.isNotEmpty == true
+                                    ? s.answer!.logs
+                                    : _liveLogs)
+                            : null,
                         running: isRunning,
                         elapsedSeconds:
                             isRunning ? _busyElapsedSeconds() : null,
@@ -390,6 +436,8 @@ class _SessionCard extends StatelessWidget {
   final bool running;
   final List<String> liveLogs;
   final int? elapsedSeconds;
+  final bool retryable;
+  final VoidCallback? onRetry;
   final VoidCallback onOpen;
   final VoidCallback onDelete;
   final GlobalSettings settings;
@@ -399,6 +447,8 @@ class _SessionCard extends StatelessWidget {
     required this.running,
     required this.liveLogs,
     required this.elapsedSeconds,
+    required this.retryable,
+    required this.onRetry,
     required this.onOpen,
     required this.onDelete,
     required this.settings,
@@ -430,6 +480,11 @@ class _SessionCard extends StatelessWidget {
           statusIcon = Icons.error_outline;
           statusColor = Colors.red[400];
           statusTooltip = 'Ошибка';
+          break;
+        case 'interrupted':
+          statusIcon = Icons.power_settings_new;
+          statusColor = Colors.orange[900];
+          statusTooltip = 'Сеанс был прерван';
           break;
         default:
           statusIcon = Icons.check_circle_outline;
@@ -482,6 +537,16 @@ class _SessionCard extends StatelessWidget {
                     ),
                   ],
                   const Spacer(),
+                  if (retryable && onRetry != null)
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 18),
+                      tooltip: 'Повторить сеанс',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                          minWidth: 28, minHeight: 28),
+                      onPressed: onRetry,
+                    ),
                   Text(
                     '#${q.id.substring(0, 6)}',
                     style: TextStyle(

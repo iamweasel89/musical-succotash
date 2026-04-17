@@ -313,6 +313,16 @@ class AppModel extends ChangeNotifier {
           (jsonDecode(wsMsgsRaw) as List)
               .map((j) => WebSearchMessage.fromJson(j as Map<String, dynamic>)),
         );
+        // Orphan detection: любой assistant со status='running' был прерван
+        // (процесс/приложение прибили до сохранения ответа).
+        for (final m in webSearchMessages) {
+          if (m.role == 'assistant' && m.status == 'running') {
+            m.status = 'interrupted';
+            if (m.text.isEmpty) {
+              m.text = '(сеанс прерван до получения ответа)';
+            }
+          }
+        }
       }
       final wsCfgRaw = _box.get('webSearchConfig');
       if (wsCfgRaw != null) {
