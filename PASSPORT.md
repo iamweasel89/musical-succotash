@@ -339,6 +339,15 @@ lib/
 **СТ — Стартер-промпт** *(воспроизводимость стиля работы в других сессиях)*
 - СТ1 `CLAUDE-STYLE.md` — экстракт раздела «Протокол работы» + термины проекта (тезис/канва/мастерская/…) + маркировка. Без бэклога и истории реализации. Подсовывать в разовые чаты где полный PASSPORT избыточен.
 
+**Р — Рефакторинг** *(техдолг; ретроспектива 2026-04-17 — кодовая база начинает обрастать god-файлами)*
+- Р1 расщепить `chat_screen.dart` (1367 строк) — выделить `chat/bubble.dart`, `chat/action_row.dart`, `chat/messages_builder.dart`, `chat/attachments.dart`
+- Р2 единый LLM-клиент — вынести HTTP-часть из `api_runner` / `agent_runner` / `llm_transform` в `services/llm_client.dart` с интерфейсом `call(messages, {tools, stream}) → Stream<Event>`; сейчас 3×3 дубль (три вызывающих × три провайдера)
+- Р3 расщепить `settings_sheet.dart` (860 строк) по секциям — `settings/api_keys_section.dart`, `settings/components_section.dart`, `settings/chat_section.dart` и т.п.
+- Р4 sub-managers под AppModel — `ThesisManager`, `DecisionManager`, `WebSearchManager` в `models/managers/`; AppModel становится агрегатором
+- Р5 базовые тесты — happy-path по критическим сервисам (`llm_transform`, `agent_runner`, `web_search`); сейчас один `app_model_test.dart`
+- Р6 seed-данные Decision tree вынести в JSON-файл (сейчас ~180 строк хардкода в `app_model.dart`)
+- Р7 каталог переиспользуемых UI — папка `widgets/shared/` (compress_sheet уже подходит по смыслу); чтобы не повторялось как было с `_CompressSheet`
+
 **Ш — Защита системы** *(обсудить перед внедрением)*
 - Ш1  пин/биометрия при запуске
 - Ш2  шифрование хранилища — Hive AES
