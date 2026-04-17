@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/settings.dart';
-import '../services/llm_transform.dart';
+import '../../models/settings.dart';
+import '../../services/llm_transform.dart';
 
 // ── Compress sheet — переиспользуемая шторка сжатия текста ──────────────────
 // Принимает произвольный текст + settings. Позволяет выбрать N строк (чипами),
