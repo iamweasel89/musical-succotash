@@ -9,6 +9,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'chat/helpers/bubble_time.dart';
 import 'chat/helpers/emoji.dart';
+import 'chat/widgets/action_row.dart';
 import 'models/app_model.dart';
 import 'models/attachment.dart';
 import 'models/edge.dart';
@@ -861,20 +862,20 @@ class _ChatScreenState extends State<ChatScreen>
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         children: [
-          _ToolBtn(
+          ToolBtn(
             icon: Icons.undo,
             tooltip: widget.model.canUndo
                 ? 'Отменить: ${widget.model.undoStack.last.description}'
                 : 'Нечего отменять',
             onTap: widget.model.canUndo ? widget.model.undo : null,
           ),
-          _ToolBtn(
+          ToolBtn(
             icon: Icons.redo,
             tooltip: widget.model.canRedo ? 'Повторить' : 'Нечего повторять',
             onTap: widget.model.canRedo ? widget.model.redo : null,
           ),
           if (widget.model.canUndo)
-            _ToolBtn(
+            ToolBtn(
               icon: Icons.history,
               tooltip: 'История',
               onTap: () => _showHistory(),
@@ -892,7 +893,7 @@ class _ChatScreenState extends State<ChatScreen>
             style: TextStyle(fontSize: 12, color: Colors.grey[400]),
           ),
           const SizedBox(width: 4),
-          _ToolBtn(
+          ToolBtn(
             icon: _globalCollapse ? Icons.unfold_more : Icons.unfold_less,
             tooltip: _globalCollapse ? 'Развернуть все' : 'Свернуть все',
             onTap: _toggleAll,
@@ -1215,7 +1216,7 @@ class _ChatBubble extends StatelessWidget {
                   )),
                 ),
               ),
-            _ActionRow(
+            ActionRow(
               onCopy: onCopy,
               onEdit: onEdit,
               onBranch: onBranch,
@@ -1264,104 +1265,6 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-
-class _ActionRow extends StatelessWidget {
-  final VoidCallback onCopy;
-  final VoidCallback? onEdit;
-  final VoidCallback? onBranch;
-  final VoidCallback? onRetry;
-  final VoidCallback? onSettings;
-  final VoidCallback? onDeleteBranch;
-  final VoidCallback? onMarkup;
-  final VoidCallback? onCompress;
-  final bool markupActive;
-
-  const _ActionRow({
-    required this.onCopy,
-    this.onEdit,
-    this.onBranch,
-    this.onRetry,
-    this.onSettings,
-    this.onDeleteBranch,
-    this.onMarkup,
-    this.onCompress,
-    this.markupActive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _Btn(icon: Icons.copy_outlined, tooltip: 'Копировать', onTap: onCopy),
-        if (onEdit != null)
-          _Btn(icon: Icons.edit_outlined, tooltip: 'Редактировать', onTap: onEdit!),
-        if (onBranch != null)
-          _Btn(icon: Icons.call_split, tooltip: 'Ветвление', onTap: onBranch!),
-        if (onRetry != null)
-          _Btn(icon: Icons.replay, tooltip: 'Повторить', onTap: onRetry!),
-        if (onSettings != null)
-          _Btn(icon: Icons.more_horiz, tooltip: 'Настройки', onTap: onSettings!),
-        if (onDeleteBranch != null)
-          _Btn(icon: Icons.delete_outline, tooltip: 'Удалить ветку', onTap: onDeleteBranch!, color: Colors.red[300]),
-        if (onMarkup != null)
-          _Btn(
-            icon: Icons.format_quote_outlined,
-            tooltip: 'Добавить тезис',
-            onTap: onMarkup!,
-            color: markupActive ? Colors.deepPurple[300] : null,
-          ),
-        if (onCompress != null)
-          _Btn(icon: Icons.compress, tooltip: 'Сжать…', onTap: onCompress!),
-      ],
-    );
-  }
-}
-
-class _Btn extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-  final Color? color;
-
-  const _Btn({required this.icon, required this.tooltip, required this.onTap, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(icon, size: 16),
-      tooltip: tooltip,
-      onPressed: onTap,
-      padding: const EdgeInsets.all(4),
-      constraints: const BoxConstraints(),
-      visualDensity: VisualDensity.compact,
-      color: color ?? Colors.grey[600],
-    );
-  }
-}
-
-// ── Toolbar button (larger, supports null = disabled) ─────────────────────
-
-class _ToolBtn extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-
-  const _ToolBtn({required this.icon, required this.tooltip, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(icon, size: 18),
-      tooltip: tooltip,
-      onPressed: onTap,
-      padding: const EdgeInsets.all(4),
-      constraints: const BoxConstraints(),
-      visualDensity: VisualDensity.compact,
-      color: onTap != null ? Colors.grey[700] : Colors.grey[400],
-    );
-  }
-}
 
 // ── History sheet ─────────────────────────────────────────────────────────
 
