@@ -272,9 +272,10 @@ class _CompressAnythingState extends State<_CompressAnything> {
 
 const List<String> _endpoints = [
   '/state',
+  '/screen',
+  '/canvas',
   '/settings',
   '/logs',
-  '/canvas',
   '/theses',
   '/decisions',
   '/websearch',
