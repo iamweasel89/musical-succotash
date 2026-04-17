@@ -6,6 +6,7 @@ import '../models/settings.dart';
 import '../models/web_search_room.dart';
 import '../services/agent_runner.dart';
 import 'shared/compress_sheet.dart';
+import 'web_search_detail_screen.dart';
 
 // ── Мастерская: Веб-поиск (ПО) ────────────────────────────────────────────────
 
@@ -137,6 +138,34 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
     _m.notifyWebSearchChanged();
   }
 
+  // Пара «запрос + ответ» по индексу клика. user → следующий assistant;
+  // assistant → предыдущий user. Может вернуть один из двух nullable.
+  void _openDetail(int i) {
+    final msg = _msgs[i];
+    WebSearchMessage? query;
+    WebSearchMessage? answer;
+    if (msg.role == 'user') {
+      query = msg;
+      for (var j = i + 1; j < _msgs.length; j++) {
+        if (_msgs[j].role == 'assistant') {
+          answer = _msgs[j];
+          break;
+        }
+      }
+    } else {
+      answer = msg;
+      for (var j = i - 1; j >= 0; j--) {
+        if (_msgs[j].role == 'user') {
+          query = _msgs[j];
+          break;
+        }
+      }
+    }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => WebSearchDetailScreen(query: query, answer: answer),
+    ));
+  }
+
   void _openConfig() {
     showModalBottomSheet(
       context: context,
@@ -186,6 +215,7 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
                           return _MessageTile(
                             message: m,
                             onDelete: () => _deleteMessage(m.id),
+                            onOpenDetail: () => _openDetail(i),
                             settings: _m.settings,
                           );
                         }
@@ -231,11 +261,13 @@ class _EmptyHint extends StatelessWidget {
 class _MessageTile extends StatelessWidget {
   final WebSearchMessage message;
   final VoidCallback onDelete;
+  final VoidCallback onOpenDetail;
   final GlobalSettings settings;
 
   const _MessageTile({
     required this.message,
     required this.onDelete,
+    required this.onOpenDetail,
     required this.settings,
   });
 
@@ -322,6 +354,7 @@ class _MessageTile extends StatelessWidget {
           Align(
             alignment: align,
             child: GestureDetector(
+              onTap: onOpenDetail,
               onLongPress: () => _showActions(context),
               child: Container(
                 constraints: BoxConstraints(
