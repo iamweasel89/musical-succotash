@@ -76,10 +76,13 @@ lib/
     attachment.dart              — Attachment (image base64 / текстовый контент)
     thesis_entry.dart            — ThesisEntry (sourceNodeId, excerpt, thesis, answer)
     decision_entry.dart          — DecisionEntry (type, status, notes, parentId)
+    web_search_room.dart         — WebSearchMessage + WebSearchConfig (комната веб-поиска)
     hex_pos.dart                 — HexPos (q, r)
     hex_layout.dart              — axial hex: направления, соседи
   services/
     api_runner.dart              — callLlm(), streaming, multi-provider
+    agent_runner.dart            — runAgentTurn() с tool_use циклом (web_search)
+    web_search.dart              — Tavily + DuckDuckGo с fallback и логом
     dump_service.dart            — DumpService.saveDump() → documents/inbox/*.md
     logger.dart                  — AppLogger (ring-buffer in-memory log)
     updater.dart                 — AppUpdater (проверка/скачивание/установка APK)
@@ -89,10 +92,11 @@ lib/
     hex_painter.dart             — CustomPainter (grid, nodes, edges)
     hex_math.dart                — hexToWorld, worldToHex
   widgets/
-    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс
+    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск
     thesis_workshop_screen.dart  — режим тезисов (Я1–Я8)
     decision_tree_screen.dart    — дерево решений (Т1–Т5)
     inbox_screen.dart            — просмотр documents/inbox/ (О2)
+    web_search_screen.dart       — комната веб-поиска (ПО): чат-агент с tool_use, история, настройки
     excerpt_extractor.dart       — свайп-выделение слов, буфер, инерция
     settings_sheet.dart          — настройки (bottom sheet); вход в Мастерскую
     api_node_sheet.dart          — настройки API-ноды
@@ -117,6 +121,7 @@ lib/
 | Дерево решений — экран в Мастерской, экспорт md (Т1, Т2, Т4) | готово |
 | Инбокс-экран — просмотр documents/inbox/ (О2) | готово |
 | Поиск по нодам — SearchScreen, переход к цепочке | готово |
+| Веб-поиск — комната Мастерской, агент с web_search, Tavily/DDG, история (ПО1–ПО4) | готово |
 | Автообновление APK — AppUpdater | готово |
 | Логгер + LogSheet | готово |
 | CanvasData.createdAt | готово |
@@ -164,10 +169,10 @@ lib/
 - П2  паспорт-нода в канве — особый тип, тело в локальном хранилище
 
 **ПО — Поисковый агент**
-- ПО1  ключ Tavily в настройках приложения
-- ПО2  агентский цикл в ApiRunner — tool_use detection + execution loop
-- ПО3  инструмент web_search — Tavily основной, DuckDuckGo резерв
-- ПО4  ротация провайдеров по исчерпанию квоты
+- ПО1 ✓ ключ Tavily в настройках приложения
+- ПО2 ✓ агентский цикл — `services/agent_runner.dart`, tool_use для Anthropic/OpenAI/DeepSeek
+- ПО3 ✓ инструмент web_search — Tavily основной, DuckDuckGo резерв
+- ПО4 ✓ ротация поисковых провайдеров — Tavily→DDG при отсутствии ключа / 401 / 429 / ошибке / 0 результатов, с пояснением в логе комнаты
 
 **Р — Разделка дампов**
 - Р1  обработка дампа в экстракторе — загрузить inbox-файл как источник текста

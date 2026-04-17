@@ -36,7 +36,7 @@ jobs:
         run: flutter test
 
       - name: Build APK (release)
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        run: flutter build apk --release --obfuscate --split-debug-info=build/symbols --build-number=${{ github.run_number }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -44,6 +44,13 @@ jobs:
           name: hex-canvas-mobile-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: hex-canvas-mobile-symbols
+          path: build/symbols
+          retention-days: 90
 
       - name: Publish GitHub release
         if: github.ref == 'refs/heads/claude/hex-canvas-mobile-08MeM'

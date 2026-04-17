@@ -2,6 +2,7 @@ class GlobalSettings {
   String anthropicKey;
   String openAiKey;
   String deepSeekKey;
+  String tavilyKey;
   String defaultSystemPrompt;
   bool streamingMode;
   bool showNodeLabels;
@@ -23,6 +24,9 @@ class GlobalSettings {
   bool showBubbleTime;
   bool showBubbleId;
 
+  // Hide the "добавить тезис" button on chat bubbles
+  bool hideThesisButton;
+
   // Token usage totals (cumulative)
   int tokensInAnthropicTotal;
   int tokensOutAnthropicTotal;
@@ -35,6 +39,7 @@ class GlobalSettings {
     this.anthropicKey = '',
     this.openAiKey = '',
     this.deepSeekKey = '',
+    this.tavilyKey = '',
     this.defaultSystemPrompt = '',
     this.useBuiltinSystemPrompt = true,
     this.streamingMode = false,
@@ -49,6 +54,7 @@ class GlobalSettings {
     this.compactLines = 5,
     this.showBubbleTime = false,
     this.showBubbleId = false,
+    this.hideThesisButton = false,
     this.tokensInAnthropicTotal = 0,
     this.tokensOutAnthropicTotal = 0,
     this.tokensInOpenaiTotal = 0,
@@ -61,6 +67,7 @@ class GlobalSettings {
         'anthropicKey': anthropicKey,
         'openAiKey': openAiKey,
         'deepSeekKey': deepSeekKey,
+        'tavilyKey': tavilyKey,
         'defaultSystemPrompt': defaultSystemPrompt,
         'useBuiltinSystemPrompt': useBuiltinSystemPrompt,
         'streamingMode': streamingMode,
@@ -75,6 +82,7 @@ class GlobalSettings {
         'compactLines': compactLines,
         'showBubbleTime': showBubbleTime,
         'showBubbleId': showBubbleId,
+        'hideThesisButton': hideThesisButton,
         'tokensInAnthropicTotal': tokensInAnthropicTotal,
         'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
         'tokensInOpenaiTotal': tokensInOpenaiTotal,
@@ -87,6 +95,7 @@ class GlobalSettings {
         anthropicKey: j['anthropicKey'] as String? ?? '',
         openAiKey: j['openAiKey'] as String? ?? '',
         deepSeekKey: j['deepSeekKey'] as String? ?? '',
+        tavilyKey: j['tavilyKey'] as String? ?? '',
         defaultSystemPrompt: j['defaultSystemPrompt'] as String? ?? '',
         useBuiltinSystemPrompt: j['useBuiltinSystemPrompt'] as bool? ?? true,
         streamingMode: j['streamingMode'] as bool? ?? false,
@@ -101,6 +110,7 @@ class GlobalSettings {
         compactLines: j['compactLines'] as int? ?? 5,
         showBubbleTime: j['showBubbleTime'] as bool? ?? false,
         showBubbleId: j['showBubbleId'] as bool? ?? false,
+        hideThesisButton: j['hideThesisButton'] as bool? ?? false,
         tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
         tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
         tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,

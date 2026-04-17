@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../models/app_model.dart';
 import 'decision_tree_screen.dart';
 import 'excerpt_extractor.dart';
+import 'help_screen.dart';
 import 'inbox_screen.dart';
 import 'thesis_workshop_screen.dart';
+import 'web_search_screen.dart';
 
 // ── Мастерская — экран с комнатами ────────────────────────────────────────────
 
@@ -82,6 +84,22 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'Дампы тезисов и диалогов',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => const InboxScreen(),
+            )),
+          ),
+          _Room(
+            icon: Icons.travel_explore_outlined,
+            title: 'Веб-поиск',
+            subtitle: 'Агент с web_search (Tavily / DuckDuckGo)',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => WebSearchScreen(model: model),
+            )),
+          ),
+          _Room(
+            icon: Icons.help_outline,
+            title: 'Справка',
+            subtitle: 'Термины: тезис, канва, инбокс, мастерская',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const HelpScreen(),
             )),
           ),
         ],
