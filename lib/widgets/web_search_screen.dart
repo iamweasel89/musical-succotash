@@ -85,7 +85,9 @@ class _WebSearchScreenState extends State<WebSearchScreen>
       final qText = s.query.text;
       final aText = s.answer?.text ?? '';
       final status = s.answer?.status;
-      final completed = status != null &&
+      // Legacy сообщения имели status=null при успешном завершении — тоже
+      // считаем completed. Не completed только running/interrupted.
+      final completed = s.answer != null &&
           status != 'running' &&
           status != 'interrupted';
       items.add({
