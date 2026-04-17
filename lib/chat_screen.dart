@@ -796,7 +796,9 @@ class _ChatScreenState extends State<ChatScreen> {
               : null,
           onSettings: isApi ? () => _showNodeSettings(node, i) : null,
           onDeleteBranch: () => _deleteBranch(i),
-          onMarkup: node.text.isNotEmpty ? () => _enterMarkup(node) : null,
+          onMarkup: (node.text.isNotEmpty && !widget.model.settings.hideThesisButton)
+              ? () => _enterMarkup(node)
+              : null,
           markupActive: _markupMode,
         );
       },

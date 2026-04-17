@@ -316,6 +316,14 @@ class _SettingsSheetState extends State<SettingsSheet> {
                 _save();
               },
             ),
+            _SwitchRow(
+              label: 'Скрыть кнопку тезиса на пузыре',
+              value: s.hideThesisButton,
+              onChanged: (v) {
+                setState(() => s.hideThesisButton = v);
+                _save();
+              },
+            ),
             Row(
               children: [
                 const Text('Строк видно:',

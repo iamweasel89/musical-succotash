@@ -24,6 +24,9 @@ class GlobalSettings {
   bool showBubbleTime;
   bool showBubbleId;
 
+  // Hide the "добавить тезис" button on chat bubbles
+  bool hideThesisButton;
+
   // Token usage totals (cumulative)
   int tokensInAnthropicTotal;
   int tokensOutAnthropicTotal;
@@ -51,6 +54,7 @@ class GlobalSettings {
     this.compactLines = 5,
     this.showBubbleTime = false,
     this.showBubbleId = false,
+    this.hideThesisButton = false,
     this.tokensInAnthropicTotal = 0,
     this.tokensOutAnthropicTotal = 0,
     this.tokensInOpenaiTotal = 0,
@@ -78,6 +82,7 @@ class GlobalSettings {
         'compactLines': compactLines,
         'showBubbleTime': showBubbleTime,
         'showBubbleId': showBubbleId,
+        'hideThesisButton': hideThesisButton,
         'tokensInAnthropicTotal': tokensInAnthropicTotal,
         'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
         'tokensInOpenaiTotal': tokensInOpenaiTotal,
@@ -105,6 +110,7 @@ class GlobalSettings {
         compactLines: j['compactLines'] as int? ?? 5,
         showBubbleTime: j['showBubbleTime'] as bool? ?? false,
         showBubbleId: j['showBubbleId'] as bool? ?? false,
+        hideThesisButton: j['hideThesisButton'] as bool? ?? false,
         tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
         tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
         tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,
