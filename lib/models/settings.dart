@@ -2,6 +2,7 @@ class GlobalSettings {
   String anthropicKey;
   String openAiKey;
   String deepSeekKey;
+  String tavilyKey;
   String defaultSystemPrompt;
   bool streamingMode;
   bool showNodeLabels;
@@ -35,6 +36,7 @@ class GlobalSettings {
     this.anthropicKey = '',
     this.openAiKey = '',
     this.deepSeekKey = '',
+    this.tavilyKey = '',
     this.defaultSystemPrompt = '',
     this.useBuiltinSystemPrompt = true,
     this.streamingMode = false,
@@ -61,6 +63,7 @@ class GlobalSettings {
         'anthropicKey': anthropicKey,
         'openAiKey': openAiKey,
         'deepSeekKey': deepSeekKey,
+        'tavilyKey': tavilyKey,
         'defaultSystemPrompt': defaultSystemPrompt,
         'useBuiltinSystemPrompt': useBuiltinSystemPrompt,
         'streamingMode': streamingMode,
@@ -87,6 +90,7 @@ class GlobalSettings {
         anthropicKey: j['anthropicKey'] as String? ?? '',
         openAiKey: j['openAiKey'] as String? ?? '',
         deepSeekKey: j['deepSeekKey'] as String? ?? '',
+        tavilyKey: j['tavilyKey'] as String? ?? '',
         defaultSystemPrompt: j['defaultSystemPrompt'] as String? ?? '',
         useBuiltinSystemPrompt: j['useBuiltinSystemPrompt'] as bool? ?? true,
         streamingMode: j['streamingMode'] as bool? ?? false,

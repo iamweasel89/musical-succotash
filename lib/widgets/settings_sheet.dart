@@ -464,6 +464,7 @@ class _ApiKeysSheetState extends State<_ApiKeysSheet> {
   late final TextEditingController _anthropicCtrl;
   late final TextEditingController _openAiCtrl;
   late final TextEditingController _deepSeekCtrl;
+  late final TextEditingController _tavilyCtrl;
 
   @override
   void initState() {
@@ -472,6 +473,7 @@ class _ApiKeysSheetState extends State<_ApiKeysSheet> {
     _anthropicCtrl = TextEditingController(text: s.anthropicKey);
     _openAiCtrl = TextEditingController(text: s.openAiKey);
     _deepSeekCtrl = TextEditingController(text: s.deepSeekKey);
+    _tavilyCtrl = TextEditingController(text: s.tavilyKey);
   }
 
   @override
@@ -479,6 +481,7 @@ class _ApiKeysSheetState extends State<_ApiKeysSheet> {
     _anthropicCtrl.dispose();
     _openAiCtrl.dispose();
     _deepSeekCtrl.dispose();
+    _tavilyCtrl.dispose();
     super.dispose();
   }
 
@@ -487,6 +490,7 @@ class _ApiKeysSheetState extends State<_ApiKeysSheet> {
     s.anthropicKey = _anthropicCtrl.text.trim();
     s.openAiKey = _openAiCtrl.text.trim();
     s.deepSeekKey = _deepSeekCtrl.text.trim();
+    s.tavilyKey = _tavilyCtrl.text.trim();
     widget.onChanged();
   }
 
@@ -509,6 +513,10 @@ class _ApiKeysSheetState extends State<_ApiKeysSheet> {
             _KeyField(label: 'OpenAI', ctrl: _openAiCtrl, onChanged: _save),
             _KeyField(
                 label: 'DeepSeek', ctrl: _deepSeekCtrl, onChanged: _save),
+            _KeyField(
+                label: 'Tavily (web search)',
+                ctrl: _tavilyCtrl,
+                onChanged: _save),
           ],
         ),
       ),

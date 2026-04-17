@@ -9,6 +9,7 @@ import 'edge.dart';
 import 'node.dart';
 import 'settings.dart';
 import 'thesis_entry.dart';
+import 'web_search_room.dart';
 
 // ── History entry ──────────────────────────────────────────────────────────
 
@@ -60,6 +61,15 @@ class AppModel extends ChangeNotifier {
   final List<DecisionEntry> decisions = [];
   void notifyDecisionsChanged() { save(); notifyListeners(); }
   void notifyThesesChanged() { save(); notifyListeners(); }
+
+  // ── Веб-поиск (комната Мастерской) ────────────────────────────────────────
+  final List<WebSearchMessage> webSearchMessages = [];
+  final WebSearchConfig webSearchConfig = WebSearchConfig();
+  void notifyWebSearchChanged() { save(); notifyListeners(); }
+  void clearWebSearch() {
+    webSearchMessages.clear();
+    notifyWebSearchChanged();
+  }
 
   void _seedDecisions() {
     // Фиксированные ID чтобы дерево было воспроизводимым
@@ -307,6 +317,23 @@ class AppModel extends ChangeNotifier {
       if (decisions.isEmpty) _seedDecisions();
       _migrateDecisions();
 
+      // Load web search room
+      final wsMsgsRaw = _box.get('webSearchMessages');
+      if (wsMsgsRaw != null) {
+        webSearchMessages.addAll(
+          (jsonDecode(wsMsgsRaw) as List)
+              .map((j) => WebSearchMessage.fromJson(j as Map<String, dynamic>)),
+        );
+      }
+      final wsCfgRaw = _box.get('webSearchConfig');
+      if (wsCfgRaw != null) {
+        final loaded = WebSearchConfig.fromJson(
+            jsonDecode(wsCfgRaw) as Map<String, dynamic>);
+        webSearchConfig.systemPrompt = loaded.systemPrompt;
+        webSearchConfig.provider = loaded.provider;
+        webSearchConfig.model = loaded.model;
+      }
+
       // First run or migration: create default canvas from existing data
       if (canvases.isEmpty) {
         final canvas = CanvasData(
@@ -338,6 +365,9 @@ class AppModel extends ChangeNotifier {
     _box.put('settings', jsonEncode(settings.toJson()));
     _box.put('theses', jsonEncode(theses.map((t) => t.toJson()).toList()));
     _box.put('decisions', jsonEncode(decisions.map((d) => d.toJson()).toList()));
+    _box.put('webSearchMessages',
+        jsonEncode(webSearchMessages.map((m) => m.toJson()).toList()));
+    _box.put('webSearchConfig', jsonEncode(webSearchConfig.toJson()));
   }
 
   /// Save pan/zoom without triggering a full rebuild.
