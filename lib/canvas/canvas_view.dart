@@ -269,87 +269,96 @@ class _CanvasToolbar extends StatelessWidget {
       listenable: model,
       builder: (_, __) => Material(
         elevation: 1,
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.undo, size: 20),
-              tooltip: model.canUndo
-                  ? 'Отменить: ${model.undoStack.last.description}'
-                  : 'Нечего отменять',
-              onPressed: model.canUndo ? model.undo : null,
-              color: model.canUndo ? null : Colors.grey[400],
-            ),
-            IconButton(
-              icon: const Icon(Icons.redo, size: 20),
-              tooltip: model.canRedo ? 'Повторить' : 'Нечего повторять',
-              onPressed: model.canRedo ? model.redo : null,
-              color: model.canRedo ? null : Colors.grey[400],
-            ),
-            const VerticalDivider(width: 8),
-            IconButton(
-              icon: const Icon(Icons.zoom_out_map),
-              tooltip: 'Fit all',
-              onPressed: onFitAll,
-            ),
-            IconButton(
-              icon: const Icon(Icons.center_focus_strong),
-              tooltip: 'Centre on origin',
-              onPressed: onCenter,
-            ),
-            const VerticalDivider(width: 8),
-            // Canvas name — tap to switch
-            Expanded(
-              child: InkWell(
-                onTap: onCanvasTap,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.layers_outlined, size: 16),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          model.activeCanvas.name.isEmpty
-                              ? 'Canvas ${model.canvases.indexOf(model.activeCanvas) + 1}'
-                              : model.activeCanvas.name,
-                          style: const TextStyle(fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.undo, size: 20),
+                  tooltip: model.canUndo
+                      ? 'Отменить: ${model.undoStack.last.description}'
+                      : 'Нечего отменять',
+                  onPressed: model.canUndo ? model.undo : null,
+                  color: model.canUndo ? null : Colors.grey[400],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.redo, size: 20),
+                  tooltip: model.canRedo ? 'Повторить' : 'Нечего повторять',
+                  onPressed: model.canRedo ? model.redo : null,
+                  color: model.canRedo ? null : Colors.grey[400],
+                ),
+                const VerticalDivider(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.zoom_out_map),
+                  tooltip: 'Fit all',
+                  onPressed: onFitAll,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.center_focus_strong),
+                  tooltip: 'Centre on origin',
+                  onPressed: onCenter,
+                ),
+                const VerticalDivider(width: 8),
+                // Canvas name — tap to switch
+                Expanded(
+                  child: InkWell(
+                    onTap: onCanvasTap,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.layers_outlined, size: 16),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              model.activeCanvas.name.isEmpty
+                                  ? 'Canvas ${model.canvases.indexOf(model.activeCanvas) + 1}'
+                                  : model.activeCanvas.name,
+                              style: const TextStyle(fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (model.canvases.length > 1) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${model.canvases.indexOf(model.activeCanvas) + 1}/${model.canvases.length}',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey[500]),
+                            ),
+                          ],
+                          const Icon(Icons.expand_more, size: 16),
+                        ],
                       ),
-                      if (model.canvases.length > 1) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          '${model.canvases.indexOf(model.activeCanvas) + 1}/${model.canvases.length}',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey[500]),
-                        ),
-                      ],
-                      const Icon(Icons.expand_more, size: 16),
-                    ],
+                    ),
                   ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.add, size: 20),
+                  tooltip: 'Новая канва',
+                  onPressed: onNewCanvas,
+                ),
+              ],
+            ),
+            // Build number — отдельная строка снизу, не ест ширину у Canvas
+            Padding(
+              padding: const EdgeInsets.only(right: 10, bottom: 2),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FutureBuilder<PackageInfo>(
+                  future: PackageInfo.fromPlatform(),
+                  builder: (_, snap) {
+                    if (!snap.hasData) return const SizedBox.shrink();
+                    return Text(
+                      'b${snap.data!.buildNumber}',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                    );
+                  },
+                ),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.add, size: 20),
-              tooltip: 'Новая канва',
-              onPressed: onNewCanvas,
-            ),
-            FutureBuilder<PackageInfo>(
-              future: PackageInfo.fromPlatform(),
-              builder: (_, snap) {
-                if (!snap.hasData) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Text(
-                    'b${snap.data!.buildNumber}',
-                    style: TextStyle(fontSize: 10, color: Colors.grey[400]),
-                  ),
-                );
-              },
             ),
           ],
         ),
