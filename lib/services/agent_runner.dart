@@ -1,21 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
 
 import '../models/settings.dart';
+import 'llm_client.dart';
 import 'llm_transform.dart';
 import 'web_search.dart';
 
-// Агентский цикл с поддержкой инструментов: web_search, web_extract, web_crawl.
-// Поддерживает Anthropic (tool_use) и OpenAI/DeepSeek (function calling).
+// Агентский цикл с поддержкой инструментов: web_search, web_extract,
+// web_crawl, llm_transform. Поддерживает Anthropic (tool_use) и OpenAI/
+// DeepSeek (function calling) через унифицированный `callLlm` из llm_client.
 // Цикл: запрос → если tool_use — выполнить tool → добавить результат → повторить.
 
 const _maxIterations = 6;
 
 // Tool registry: name → (description, input_schema, handler).
-// Schema follows JSON Schema subset used both by Anthropic input_schema and
-// OpenAI function.parameters.
 class _ToolDef {
   final String description;
   final Map<String, dynamic> schema;
@@ -49,43 +46,6 @@ final Map<String, _ToolDef> _tools = {
         return 'Search failed: ${e.message}';
       } catch (e) {
         return 'Search error: $e';
-      }
-    },
-  ),
-  'web_extract': _ToolDef(
-    'Extract main text content from one or more URLs (Tavily). Use when you '
-        'need full article text, not just a snippet.',
-    {
-      'type': 'object',
-      'properties': {
-        'urls': {
-          'type': 'array',
-          'items': {'type': 'string'},
-          'description': 'List of URLs to extract text from',
-        },
-      },
-      'required': ['urls'],
-    },
-    (args, s, log) async {
-      final raw = args['urls'];
-      final urls = raw is List ? raw.whereType<String>().toList() : <String>[];
-      if (urls.isEmpty) return 'Empty urls.';
-      log?.call('📄 web_extract: ${urls.length} url(s)');
-      try {
-        final results = await tavilyExtract(urls: urls, tavilyKey: s.tavilyKey);
-        if (results.isEmpty) return 'No content extracted.';
-        final buf = StringBuffer();
-        for (final r in results) {
-          buf.writeln('--- ${r.url} ---');
-          buf.writeln(r.rawContent);
-          buf.writeln();
-        }
-        log?.call('  получено ${results.length}');
-        return buf.toString();
-      } on WebSearchException catch (e) {
-        return 'Extract failed: ${e.message}';
-      } catch (e) {
-        return 'Extract error: $e';
       }
     },
   ),
@@ -170,6 +130,43 @@ final Map<String, _ToolDef> _tools = {
       }
     },
   ),
+  'web_extract': _ToolDef(
+    'Extract main text content from one or more URLs (Tavily). Use when you '
+        'need full article text, not just a snippet.',
+    {
+      'type': 'object',
+      'properties': {
+        'urls': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'List of URLs to extract text from',
+        },
+      },
+      'required': ['urls'],
+    },
+    (args, s, log) async {
+      final raw = args['urls'];
+      final urls = raw is List ? raw.whereType<String>().toList() : <String>[];
+      if (urls.isEmpty) return 'Empty urls.';
+      log?.call('📄 web_extract: ${urls.length} url(s)');
+      try {
+        final results = await tavilyExtract(urls: urls, tavilyKey: s.tavilyKey);
+        if (results.isEmpty) return 'No content extracted.';
+        final buf = StringBuffer();
+        for (final r in results) {
+          buf.writeln('--- ${r.url} ---');
+          buf.writeln(r.rawContent);
+          buf.writeln();
+        }
+        log?.call('  получено ${results.length}');
+        return buf.toString();
+      } on WebSearchException catch (e) {
+        return 'Extract failed: ${e.message}';
+      } catch (e) {
+        return 'Extract error: $e';
+      }
+    },
+  ),
 };
 
 String _formatSearchResults(WebSearchResult r) {
@@ -201,10 +198,18 @@ Future<AgentResult> runAgentTurn({
   required GlobalSettings settings,
   AgentLogger? onLog,
 }) async {
-  final key = _llmKey(provider, settings);
+  final key = keyForProvider(provider, settings);
   if (key.isEmpty) {
     throw Exception('Нет ключа API для провайдера «$provider».');
   }
+
+  final llmTools = _tools.entries
+      .map((e) => LlmTool(
+            name: e.key,
+            description: e.value.description,
+            schema: e.value.schema,
+          ))
+      .toList();
 
   // Working copy of message history that the loop appends to.
   final history = List<Map<String, dynamic>>.from(messages);
@@ -212,12 +217,14 @@ Future<AgentResult> runAgentTurn({
   int totalOut = 0;
 
   for (var iter = 0; iter < _maxIterations; iter++) {
-    final response = await _callLlm(
+    final response = await callLlm(
       provider: provider,
       model: model,
       key: key,
       systemPrompt: systemPrompt,
-      history: history,
+      messages: history,
+      tools: llmTools,
+      maxTokens: 1024,
     );
     totalIn += response.inputTokens;
     totalOut += response.outputTokens;
@@ -226,7 +233,6 @@ Future<AgentResult> runAgentTurn({
       return AgentResult(response.text, totalIn, totalOut);
     }
 
-    // Append assistant message (with tool_use blocks) to history before tool result.
     history.add(response.assistantMessage);
 
     for (final call in response.toolCalls) {
@@ -242,226 +248,13 @@ Future<AgentResult> runAgentTurn({
           resultText = 'Tool ${call.name} error: $e';
         }
       }
-      history.add(_toolResultMessage(provider, call.id, resultText));
+      history.add(toolResultMessage(
+        provider: provider,
+        toolUseId: call.id,
+        content: resultText,
+      ));
     }
   }
 
   throw Exception('Агент превысил лимит итераций ($_maxIterations).');
-}
-
-String _llmKey(String provider, GlobalSettings s) {
-  switch (provider) {
-    case 'anthropic':
-      return s.anthropicKey;
-    case 'openai':
-      return s.openAiKey;
-    case 'deepseek':
-      return s.deepSeekKey;
-    default:
-      return '';
-  }
-}
-
-// ── LLM call (single round) ────────────────────────────────────────────────
-
-class _ToolCall {
-  final String id;
-  final String name;
-  final Map<String, dynamic> input;
-  _ToolCall(this.id, this.name, this.input);
-}
-
-class _LlmResponse {
-  final String text;
-  final List<_ToolCall> toolCalls;
-  final Map<String, dynamic> assistantMessage;
-  final int inputTokens;
-  final int outputTokens;
-  _LlmResponse({
-    required this.text,
-    required this.toolCalls,
-    required this.assistantMessage,
-    required this.inputTokens,
-    required this.outputTokens,
-  });
-}
-
-Future<_LlmResponse> _callLlm({
-  required String provider,
-  required String model,
-  required String key,
-  required String systemPrompt,
-  required List<Map<String, dynamic>> history,
-}) async {
-  switch (provider) {
-    case 'anthropic':
-      return _callAnthropic(model, key, systemPrompt, history);
-    case 'openai':
-    case 'deepseek':
-      return _callOpenAiCompat(provider, model, key, systemPrompt, history);
-    default:
-      throw Exception('Unknown provider: $provider');
-  }
-}
-
-// ── Anthropic ──────────────────────────────────────────────────────────────
-
-Future<_LlmResponse> _callAnthropic(String model, String key,
-    String systemPrompt, List<Map<String, dynamic>> history) async {
-  final body = <String, dynamic>{
-    'model': model,
-    'max_tokens': 1024,
-    if (systemPrompt.isNotEmpty) 'system': systemPrompt,
-    'messages': history,
-    'tools': _tools.entries
-        .map((e) => {
-              'name': e.key,
-              'description': e.value.description,
-              'input_schema': e.value.schema,
-            })
-        .toList(),
-  };
-
-  final r = await http.post(
-    Uri.parse('https://api.anthropic.com/v1/messages'),
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: jsonEncode(body),
-  );
-  if (r.statusCode != 200) {
-    throw Exception('Anthropic HTTP ${r.statusCode}: ${r.body}');
-  }
-  final json = jsonDecode(r.body) as Map<String, dynamic>;
-  final content = (json['content'] as List? ?? []);
-  final usage = json['usage'] as Map<String, dynamic>? ?? {};
-
-  final textParts = <String>[];
-  final calls = <_ToolCall>[];
-  for (final block in content.whereType<Map<String, dynamic>>()) {
-    if (block['type'] == 'text') {
-      textParts.add(block['text'] as String? ?? '');
-    } else if (block['type'] == 'tool_use') {
-      final name = block['name'] as String? ?? '';
-      if (_tools.containsKey(name)) {
-        calls.add(_ToolCall(
-          block['id'] as String? ?? '',
-          name,
-          (block['input'] as Map<String, dynamic>?) ?? {},
-        ));
-      }
-    }
-  }
-
-  return _LlmResponse(
-    text: textParts.join(),
-    toolCalls: calls,
-    assistantMessage: {'role': 'assistant', 'content': content},
-    inputTokens: usage['input_tokens'] as int? ?? 0,
-    outputTokens: usage['output_tokens'] as int? ?? 0,
-  );
-}
-
-// ── OpenAI / DeepSeek ──────────────────────────────────────────────────────
-
-Future<_LlmResponse> _callOpenAiCompat(String provider, String model,
-    String key, String systemPrompt, List<Map<String, dynamic>> history) async {
-  final url = provider == 'openai'
-      ? 'https://api.openai.com/v1/chat/completions'
-      : 'https://api.deepseek.com/v1/chat/completions';
-
-  final messages = <Map<String, dynamic>>[
-    if (systemPrompt.isNotEmpty)
-      {'role': 'system', 'content': systemPrompt},
-    ...history,
-  ];
-
-  final body = <String, dynamic>{
-    'model': model,
-    'messages': messages,
-    'tools': _tools.entries
-        .map((e) => {
-              'type': 'function',
-              'function': {
-                'name': e.key,
-                'description': e.value.description,
-                'parameters': e.value.schema,
-              },
-            })
-        .toList(),
-  };
-
-  final r = await http.post(
-    Uri.parse(url),
-    headers: {
-      'Authorization': 'Bearer $key',
-      'content-type': 'application/json',
-    },
-    body: jsonEncode(body),
-  );
-  if (r.statusCode != 200) {
-    throw Exception('${provider.toUpperCase()} HTTP ${r.statusCode}: ${r.body}');
-  }
-  final json = jsonDecode(r.body) as Map<String, dynamic>;
-  final choices = json['choices'] as List? ?? [];
-  if (choices.isEmpty) {
-    throw Exception('Пустой ответ от $provider');
-  }
-  final msg = (choices.first as Map<String, dynamic>)['message']
-      as Map<String, dynamic>;
-  final usage = json['usage'] as Map<String, dynamic>? ?? {};
-
-  final text = msg['content'] as String? ?? '';
-  final toolCallsRaw = msg['tool_calls'] as List? ?? [];
-
-  final calls = <_ToolCall>[];
-  for (final tc in toolCallsRaw.whereType<Map<String, dynamic>>()) {
-    final fn = tc['function'] as Map<String, dynamic>? ?? {};
-    final name = fn['name'] as String? ?? '';
-    if (!_tools.containsKey(name)) continue;
-    Map<String, dynamic> args = {};
-    final argsRaw = fn['arguments'];
-    if (argsRaw is String && argsRaw.isNotEmpty) {
-      try {
-        args = jsonDecode(argsRaw) as Map<String, dynamic>;
-      } catch (_) {}
-    } else if (argsRaw is Map<String, dynamic>) {
-      args = argsRaw;
-    }
-    calls.add(_ToolCall(tc['id'] as String? ?? '', name, args));
-  }
-
-  return _LlmResponse(
-    text: text,
-    toolCalls: calls,
-    assistantMessage: msg,
-    inputTokens: usage['prompt_tokens'] as int? ?? 0,
-    outputTokens: usage['completion_tokens'] as int? ?? 0,
-  );
-}
-
-// ── Tool result formatting ─────────────────────────────────────────────────
-
-Map<String, dynamic> _toolResultMessage(
-    String provider, String toolUseId, String content) {
-  if (provider == 'anthropic') {
-    return {
-      'role': 'user',
-      'content': [
-        {
-          'type': 'tool_result',
-          'tool_use_id': toolUseId,
-          'content': content,
-        },
-      ],
-    };
-  }
-  // OpenAI / DeepSeek
-  return {
-    'role': 'tool',
-    'tool_call_id': toolUseId,
-    'content': content,
-  };
 }
