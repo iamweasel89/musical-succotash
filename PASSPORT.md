@@ -356,10 +356,10 @@ lib/
 
 **Р — Рефакторинг** *(техдолг; ретроспектива 2026-04-17 — кодовая база начинает обрастать god-файлами)*
 - Р1 расщепить `chat_screen.dart` (1367 строк) — выделить `chat/bubble.dart`, `chat/action_row.dart`, `chat/messages_builder.dart`, `chat/attachments.dart`
-- Р2 единый LLM-клиент — вынести HTTP-часть из `api_runner` / `agent_runner` / `llm_transform` в `services/llm_client.dart` с интерфейсом `call(messages, {tools, stream}) → Stream<Event>`; сейчас 3×3 дубль (три вызывающих × три провайдера)
+- Р2 ✓ единый LLM-клиент — `services/llm_client.dart` с `callLlm()`, `LlmTool`, `LlmResult`, `toolResultMessage`, `keyForProvider`. `agent_runner.dart` и `llm_transform.dart` переведены (3×3 → 1×3). `api_runner.dart` не тронут — streaming + attachments спецификой, оставлен для Р2.1.
 - Р3 ✓ `settings_sheet.dart` расщеплён (860 → 582): создан `widgets/settings/` с `switch_row`, `default_llm_section`, `chat_display_section`, `data_section`, `usage_section`. Осталось вынести ApiKeysSheet + UpdateSection отдельным проходом.
 - Р4 sub-managers под AppModel — `ThesisManager`, `DecisionManager`, `WebSearchManager` в `models/managers/`; AppModel становится агрегатором
-- Р5 базовые тесты — happy-path по критическим сервисам (`llm_transform`, `agent_runner`, `web_search`); сейчас один `app_model_test.dart`
+- Р5 ✓ базовые тесты моделей — Reminder / WebSearchMessage / WebSearchConfig / GlobalSettings round-trip; AppModel reminders CRUD + Hive save/load. LLM-сервисы (web_search, agent_runner, llm_transform) не покрыты — нужны HTTP-моки, отложено Р5.1.
 - Р6 ✓ seed-данные Decision tree вынесены в `assets/seed/decisions.json`; `app_model.dart` сократился с 710 до 640 строк
 - Р7 каталог переиспользуемых UI — папка `widgets/shared/` (compress_sheet уже подходит по смыслу); чтобы не повторялось как было с `_CompressSheet`
 
