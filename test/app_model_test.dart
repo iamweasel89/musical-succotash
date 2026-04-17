@@ -7,6 +7,7 @@ import 'package:hex_canvas_mobile/models/app_model.dart';
 import 'package:hex_canvas_mobile/models/edge.dart';
 import 'package:hex_canvas_mobile/models/hex_pos.dart';
 import 'package:hex_canvas_mobile/models/node.dart';
+import 'package:hex_canvas_mobile/models/reminder.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -205,5 +206,39 @@ void main() {
     model.removeNodes({n1.id});
     expect(model.activeCanvasNodes.length, equals(1));
     expect(model.activeCanvas.nodeIds.length, equals(1));
+  });
+
+  // ── Reminders (ВР4) ──────────────────────────────────────────────────────
+
+  test('Reminders: add, preserve, remove (через список)', () {
+    // Просто CRUD по списку напоминаний на уровне модели — без вызова
+    // ReminderService (требует plugin). Тестируется что данные живут
+    // и корректно сериализуются.
+    expect(model.reminders, isEmpty);
+
+    model.reminders.add(
+      Reminder(scheduledAt: DateTime(2026, 5, 1), text: 'первое'),
+    );
+    model.reminders.add(
+      Reminder(scheduledAt: DateTime(2026, 5, 2), text: 'второе'),
+    );
+    expect(model.reminders.length, 2);
+
+    model.reminders.removeWhere((r) => r.text == 'первое');
+    expect(model.reminders.length, 1);
+    expect(model.reminders.first.text, 'второе');
+  });
+
+  test('Reminders: save+load round-trip через Hive', () async {
+    model.reminders.add(
+      Reminder(scheduledAt: DateTime(2026, 6, 1, 10, 0), text: 'сохраняемое'),
+    );
+    await model.save();
+
+    // Создаём новую модель — она должна подхватить сохранённые из Hive
+    final reloaded = AppModel();
+    await reloaded.load();
+    expect(reloaded.reminders.length, 1);
+    expect(reloaded.reminders.first.text, 'сохраняемое');
   });
 }
