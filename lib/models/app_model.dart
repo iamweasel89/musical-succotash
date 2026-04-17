@@ -9,6 +9,7 @@ import 'decision_entry.dart';
 import 'edge.dart';
 import 'node.dart';
 import 'reminder.dart';
+import 'screen_snapshot.dart';
 import 'settings.dart';
 import 'thesis_entry.dart';
 import 'usage_event.dart';
@@ -82,30 +83,68 @@ class AppModel extends ChangeNotifier {
   final List<UsageEvent> recentUsage = [];
   static const _maxRecentUsage = 100;
 
-  // ── Присутствие: стек открытых экранов ────────────────────────────────────
+  // ── Присутствие: стек открытых экранов + провайдеры снимков ───────────────
   // Обновляется из initState/dispose экранов. Верх стека = «где оператор
-  // прямо сейчас». Стек сохраняет историю навигации (masterskaya → web-search).
-  // Эфемерное состояние, не persist. Используется в debug-сервере /state.
+  // прямо сейчас». Параллельный стек ScreenSnapshotProvider отдаёт JSON-снимок
+  // содержимого экрана (без PNG). Универсальный интерфейс — каждый экран
+  // описывает что на нём видно; debug-сервер /screen возвращает последний.
+  // Эфемерное состояние, не persist.
   final List<String> _screenStack = ['chat'];
+  final List<ScreenSnapshotProvider?> _providerStack = [null];
   String get currentScreen =>
       _screenStack.isEmpty ? 'chat' : _screenStack.last;
   List<String> get screenStack => List.unmodifiable(_screenStack);
 
-  /// Главный экран (tab внутри MainScreen) — заменяет корень стека.
+  /// Снимок содержимого текущего экрана. null если экран провайдера не имеет
+  /// или верх двух стеков разошёлся (drift-protection — защита от ситуации
+  /// когда название экрана поменялось а провайдер остался от старого).
+  Map<String, dynamic>? captureScreenSnapshot() {
+    if (_providerStack.isEmpty) return null;
+    final p = _providerStack.last;
+    if (p == null) return null;
+    if (p.screenName != currentScreen) return null;
+    return p.capture();
+  }
+
+  /// Главный экран (tab внутри MainScreen) — обновляет только имя корня,
+  /// провайдера не трогает (им владеют сами tab-экраны через registerBaseProvider).
   void setBaseScreen(String name) {
     if (_screenStack.isEmpty) {
       _screenStack.add(name);
+      _providerStack.add(null);
     } else {
       _screenStack[0] = name;
     }
   }
 
+  /// Регистрация провайдера корневого экрана (tab). Вызывается из initState
+  /// экрана-таба. Провайдер снимается при dispose через clearBaseProvider.
+  void registerBaseProvider(ScreenSnapshotProvider p) {
+    if (_providerStack.isEmpty) {
+      _providerStack.add(p);
+    } else {
+      _providerStack[0] = p;
+    }
+  }
+
+  void clearBaseProvider(ScreenSnapshotProvider p) {
+    if (_providerStack.isNotEmpty && _providerStack[0] == p) {
+      _providerStack[0] = null;
+    }
+  }
+
   /// Вложенный pushed-экран. Вызывается в initState.
-  void pushScreen(String name) => _screenStack.add(name);
+  void pushScreen(String name, {ScreenSnapshotProvider? provider}) {
+    _screenStack.add(name);
+    _providerStack.add(provider);
+  }
 
   /// Парный вызов к pushScreen в dispose.
   void popScreen() {
-    if (_screenStack.length > 1) _screenStack.removeLast();
+    if (_screenStack.length > 1) {
+      _screenStack.removeLast();
+      _providerStack.removeLast();
+    }
   }
 
   Future<void> _seedDecisions() async {

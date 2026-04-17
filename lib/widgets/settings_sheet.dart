@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/app_model.dart';
+import '../models/screen_snapshot.dart';
 import '../models/settings.dart';
 import '../services/updater.dart';
 import 'masterskaya_screen.dart';
@@ -36,7 +37,8 @@ class SettingsSheet extends StatefulWidget {
   State<SettingsSheet> createState() => _SettingsSheetState();
 }
 
-class _SettingsSheetState extends State<SettingsSheet> {
+class _SettingsSheetState extends State<SettingsSheet>
+    implements ScreenSnapshotProvider {
   late final TextEditingController _sysPromptCtrl;
 
   @override
@@ -44,12 +46,43 @@ class _SettingsSheetState extends State<SettingsSheet> {
     super.initState();
     _sysPromptCtrl =
         TextEditingController(text: widget.settings.defaultSystemPrompt);
+    widget.model.pushScreen('settings', provider: this);
   }
 
   @override
   void dispose() {
+    widget.model.popScreen();
     _sysPromptCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  String get screenName => 'settings';
+
+  @override
+  Map<String, dynamic> capture() {
+    final s = widget.settings;
+    return {
+      'kind': 'settings',
+      'title': 'Настройки',
+      'defaultProvider': s.defaultProvider,
+      'defaultModel': s.defaultModel,
+      'streamingMode': s.streamingMode,
+      'renderMarkdown': s.renderMarkdown,
+      'hideEmoji': s.hideEmoji,
+      'showBubbleTime': s.showBubbleTime,
+      'showBubbleId': s.showBubbleId,
+      'hideThesisButton': s.hideThesisButton,
+      'hideCompressButton': s.hideCompressButton,
+      'compactChat': s.compactChat,
+      'compactLines': s.compactLines,
+      'debugServerEnabled': s.debugServerEnabled,
+      'debugServerPort': s.debugServerPort,
+      'hasAnthropicKey': s.anthropicKey.isNotEmpty,
+      'hasOpenAiKey': s.openAiKey.isNotEmpty,
+      'hasDeepSeekKey': s.deepSeekKey.isNotEmpty,
+      'hasTavilyKey': s.tavilyKey.isNotEmpty,
+    };
   }
 
   /// Вызывается секциями при любом изменении настройки. Персистим + rebuild.

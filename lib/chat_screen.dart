@@ -13,6 +13,7 @@ import 'models/edge.dart';
 import 'models/hex_layout.dart';
 import 'models/hex_pos.dart';
 import 'models/node.dart';
+import 'models/screen_snapshot.dart';
 import 'models/thesis_entry.dart';
 import 'services/api_runner.dart';
 import 'services/dump_service.dart';
@@ -41,7 +42,8 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen>
+    implements ScreenSnapshotProvider {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final List<String> _chainPath = [];
@@ -58,11 +60,72 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _globalCollapse = false;
   final _collapsedOverrides = <String>{};
 
+  // ── Visible viewport tracking для ScreenSnapshot ───────────────────────────
+  // Оценка видимого диапазона индексов в chainPath. Обновляется по scroll'у
+  // и при изменениях chainPath. Неточная (использует средний размер item),
+  // но достаточна чтобы внешний клиент понимал «где оператор сейчас».
+  int _visibleFirst = 0;
+  int _visibleLast = 0;
+
   @override
   void initState() {
     super.initState();
     _chainPath.addAll(widget.model.chainPath);
     _globalCollapse = widget.model.settings.compactChat;
+    widget.model.registerBaseProvider(this);
+    _scrollCtrl.addListener(_updateVisibleRange);
+  }
+
+  void _updateVisibleRange() {
+    if (!_scrollCtrl.hasClients) return;
+    final pos = _scrollCtrl.position;
+    if (_chainPath.isEmpty || pos.maxScrollExtent <= 0) {
+      _visibleFirst = 0;
+      _visibleLast = _chainPath.length - 1;
+      return;
+    }
+    // Средняя высота item = полный extent / count. Приближённая оценка.
+    final total = pos.maxScrollExtent + pos.viewportDimension;
+    final avgH = total / _chainPath.length;
+    if (avgH <= 0) return;
+    final first = (pos.pixels / avgH).floor();
+    final last = ((pos.pixels + pos.viewportDimension) / avgH).ceil();
+    _visibleFirst = first.clamp(0, _chainPath.length - 1);
+    _visibleLast = last.clamp(0, _chainPath.length - 1);
+  }
+
+  @override
+  String get screenName => 'chat';
+
+  @override
+  Map<String, dynamic> capture() {
+    _updateVisibleRange();
+    final items = <Map<String, dynamic>>[];
+    final from = _visibleFirst.clamp(0, _chainPath.length);
+    final to = (_visibleLast + 1).clamp(0, _chainPath.length);
+    for (var i = from; i < to; i++) {
+      final n = widget.model.nodeById(_chainPath[i]);
+      if (n == null) continue;
+      final text = n.text;
+      items.add({
+        'index': i,
+        'nodeId': n.id,
+        'kind': n.type.name,
+        'textPreview': text.length > 200 ? '${text.substring(0, 200)}…' : text,
+        'collapsed': _isNodeCollapsed(n.id),
+      });
+    }
+    return {
+      'kind': 'chat',
+      'title': widget.model.activeCanvas.name,
+      'chainLength': _chainPath.length,
+      'visibleRange': [_visibleFirst, _visibleLast],
+      'sending': _sending,
+      'markupMode': _markupMode,
+      'globalCollapse': _globalCollapse,
+      'pendingAttachments': _pendingAttachments.length,
+      'items': items,
+    };
   }
 
   bool _isNodeCollapsed(String nodeId) {
@@ -103,6 +166,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    widget.model.clearBaseProvider(this);
+    _scrollCtrl.removeListener(_updateVisibleRange);
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();

@@ -24,6 +24,7 @@ import 'logger.dart';
 //   /theses       — thesis list
 //   /decisions    — decision tree
 //   /websearch    — web search room history
+//   /screen       — JSON snapshot of current screen (presence + contents)
 //   /ips          — local interfaces the server binds to
 //   /screenshot   — PNG of current root widget
 //   /             — help page with endpoint list
@@ -104,6 +105,8 @@ class DebugServer {
             _json(req, _decisions());
           case '/websearch':
             _json(req, _webSearch());
+          case '/screen':
+            _json(req, _screen());
           case '/ips':
             _json(req, await currentIps());
           case '/screenshot':
@@ -270,6 +273,15 @@ class DebugServer {
             AppLogger.entries.map((e) => {'line': e.formatted}).toList(),
       };
 
+  static Map<String, dynamic> _screen() {
+    final m = _model!;
+    return {
+      'currentScreen': m.currentScreen,
+      'screenStack': m.screenStack,
+      'snapshot': m.captureScreenSnapshot(),
+    };
+  }
+
   static Map<String, dynamic> _canvas() {
     final m = _model!;
     return {
@@ -369,6 +381,7 @@ class DebugServer {
   <li><a href="/theses">/theses</a></li>
   <li><a href="/decisions">/decisions</a></li>
   <li><a href="/websearch">/websearch</a></li>
+  <li><a href="/screen">/screen</a></li>
   <li><a href="/ips">/ips</a></li>
   <li><a href="/screenshot">/screenshot</a> (png)</li>
 </ul>

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_model.dart';
+import '../models/screen_snapshot.dart';
 import '../models/settings.dart';
 import '../models/web_search_room.dart';
 import '../services/agent_runner.dart';
@@ -18,11 +19,14 @@ class WebSearchScreen extends StatefulWidget {
   State<WebSearchScreen> createState() => _WebSearchScreenState();
 }
 
-class _WebSearchScreenState extends State<WebSearchScreen> {
+class _WebSearchScreenState extends State<WebSearchScreen>
+    implements ScreenSnapshotProvider {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   bool _busy = false;
   final List<String> _liveLogs = [];
+  int _visibleFirst = 0;
+  int _visibleLast = 0;
 
   AppModel get _m => widget.model;
   List<WebSearchMessage> get _msgs => _m.webSearchMessages;
@@ -31,15 +35,68 @@ class _WebSearchScreenState extends State<WebSearchScreen> {
   @override
   void initState() {
     super.initState();
-    _m.pushScreen('web-search');
+    _m.pushScreen('web-search', provider: this);
+    _scroll.addListener(_updateVisibleRange);
   }
 
   @override
   void dispose() {
     _m.popScreen();
+    _scroll.removeListener(_updateVisibleRange);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _updateVisibleRange() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    final count = _msgs.length;
+    if (count == 0 || pos.maxScrollExtent <= 0) {
+      _visibleFirst = 0;
+      _visibleLast = count - 1;
+      return;
+    }
+    final total = pos.maxScrollExtent + pos.viewportDimension;
+    final avgH = total / count;
+    if (avgH <= 0) return;
+    _visibleFirst = (pos.pixels / avgH).floor().clamp(0, count - 1);
+    _visibleLast =
+        ((pos.pixels + pos.viewportDimension) / avgH).ceil().clamp(0, count - 1);
+  }
+
+  @override
+  String get screenName => 'web-search';
+
+  @override
+  Map<String, dynamic> capture() {
+    _updateVisibleRange();
+    final items = <Map<String, dynamic>>[];
+    final from = _visibleFirst.clamp(0, _msgs.length);
+    final to = (_visibleLast + 1).clamp(0, _msgs.length);
+    for (var i = from; i < to; i++) {
+      final m = _msgs[i];
+      final text = m.text;
+      items.add({
+        'index': i,
+        'id': m.id,
+        'role': m.role,
+        'textPreview': text.length > 200 ? '${text.substring(0, 200)}…' : text,
+        'status': m.status,
+        'logCount': m.logs.length,
+      });
+    }
+    return {
+      'kind': 'web-search',
+      'title': 'Веб-поиск',
+      'provider': _cfg.provider,
+      'model': _cfg.model,
+      'messageCount': _msgs.length,
+      'visibleRange': [_visibleFirst, _visibleLast],
+      'busy': _busy,
+      'liveLogs': _busy ? _liveLogs : const <String>[],
+      'items': items,
+    };
   }
 
   void _scrollToEnd() {
