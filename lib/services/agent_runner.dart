@@ -6,14 +6,147 @@ import 'package:http/http.dart' as http;
 import '../models/settings.dart';
 import 'web_search.dart';
 
-// Агентский цикл с поддержкой одного инструмента — web_search.
+// Агентский цикл с поддержкой инструментов: web_search, web_extract, web_crawl.
 // Поддерживает Anthropic (tool_use) и OpenAI/DeepSeek (function calling).
-// Цикл: запрос → если tool_use — выполнить web_search → добавить результат → повторить.
+// Цикл: запрос → если tool_use — выполнить tool → добавить результат → повторить.
 
-const _toolName = 'web_search';
-const _toolDescription =
-    'Search the web for information. Returns a list of titles, URLs and snippets.';
 const _maxIterations = 6;
+
+// Tool registry: name → (description, input_schema, handler).
+// Schema follows JSON Schema subset used both by Anthropic input_schema and
+// OpenAI function.parameters.
+class _ToolDef {
+  final String description;
+  final Map<String, dynamic> schema;
+  final Future<String> Function(Map<String, dynamic> args, GlobalSettings s,
+      AgentLogger? log) handler;
+  const _ToolDef(this.description, this.schema, this.handler);
+}
+
+final Map<String, _ToolDef> _tools = {
+  'web_search': _ToolDef(
+    'Search the web for information. Returns a list of titles, URLs and snippets.',
+    {
+      'type': 'object',
+      'properties': {
+        'query': {'type': 'string', 'description': 'Search query'},
+      },
+      'required': ['query'],
+    },
+    (args, s, log) async {
+      final query = (args['query'] as String?)?.trim() ?? '';
+      if (query.isEmpty) return 'Empty query.';
+      log?.call('🔍 web_search: «$query»');
+      try {
+        final result = await webSearch(
+          query: query,
+          tavilyKey: s.tavilyKey,
+          log: (line) => log?.call('  $line'),
+        );
+        return _formatSearchResults(result);
+      } on WebSearchException catch (e) {
+        return 'Search failed: ${e.message}';
+      } catch (e) {
+        return 'Search error: $e';
+      }
+    },
+  ),
+  'web_extract': _ToolDef(
+    'Extract main text content from one or more URLs (Tavily). Use when you '
+        'need full article text, not just a snippet.',
+    {
+      'type': 'object',
+      'properties': {
+        'urls': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'List of URLs to extract text from',
+        },
+      },
+      'required': ['urls'],
+    },
+    (args, s, log) async {
+      final raw = args['urls'];
+      final urls = raw is List ? raw.whereType<String>().toList() : <String>[];
+      if (urls.isEmpty) return 'Empty urls.';
+      log?.call('📄 web_extract: ${urls.length} url(s)');
+      try {
+        final results = await tavilyExtract(urls: urls, tavilyKey: s.tavilyKey);
+        if (results.isEmpty) return 'No content extracted.';
+        final buf = StringBuffer();
+        for (final r in results) {
+          buf.writeln('--- ${r.url} ---');
+          buf.writeln(r.rawContent);
+          buf.writeln();
+        }
+        log?.call('  получено ${results.length}');
+        return buf.toString();
+      } on WebSearchException catch (e) {
+        return 'Extract failed: ${e.message}';
+      } catch (e) {
+        return 'Extract error: $e';
+      }
+    },
+  ),
+  'web_crawl': _ToolDef(
+    'Crawl a website starting from a URL and return raw content of visited '
+        'pages (Tavily). Use for scanning docs sites or small websites.',
+    {
+      'type': 'object',
+      'properties': {
+        'url': {'type': 'string', 'description': 'Start URL'},
+        'max_depth': {
+          'type': 'integer',
+          'description': 'Crawl depth (default 1, max suggested 3)',
+        },
+        'limit': {
+          'type': 'integer',
+          'description': 'Max pages to fetch (default 20)',
+        },
+      },
+      'required': ['url'],
+    },
+    (args, s, log) async {
+      final url = (args['url'] as String?)?.trim() ?? '';
+      if (url.isEmpty) return 'Empty url.';
+      final depth = args['max_depth'] is int ? args['max_depth'] as int : 1;
+      final limit = args['limit'] is int ? args['limit'] as int : 20;
+      log?.call('🕸 web_crawl: $url (depth=$depth, limit=$limit)');
+      try {
+        final results = await tavilyCrawl(
+            startUrl: url,
+            tavilyKey: s.tavilyKey,
+            maxDepth: depth,
+            limit: limit);
+        if (results.isEmpty) return 'No pages crawled.';
+        final buf = StringBuffer();
+        for (final r in results) {
+          buf.writeln('--- ${r.url} ---');
+          buf.writeln(r.rawContent);
+          buf.writeln();
+        }
+        log?.call('  получено ${results.length} страниц');
+        return buf.toString();
+      } on WebSearchException catch (e) {
+        return 'Crawl failed: ${e.message}';
+      } catch (e) {
+        return 'Crawl error: $e';
+      }
+    },
+  ),
+};
+
+String _formatSearchResults(WebSearchResult r) {
+  final buf = StringBuffer('Provider: ${r.provider.name}\n');
+  for (var i = 0; i < r.hits.length; i++) {
+    final h = r.hits[i];
+    buf.writeln('---');
+    buf.writeln('[${i + 1}] ${h.title}');
+    buf.writeln(h.url);
+    buf.writeln(h.snippet);
+  }
+  return buf.toString();
+}
 
 class AgentResult {
   final String text;
@@ -61,45 +194,23 @@ Future<AgentResult> runAgentTurn({
     history.add(response.assistantMessage);
 
     for (final call in response.toolCalls) {
-      final query = (call.input['query'] as String?)?.trim() ?? '';
-      onLog?.call('🔍 web_search: «$query»');
-
+      final def = _tools[call.name];
       String resultText;
-      if (query.isEmpty) {
-        resultText = 'Empty query.';
-        onLog?.call('  пустой запрос — пропуск');
+      if (def == null) {
+        resultText = 'Unknown tool: ${call.name}';
+        onLog?.call('⚠ неизвестный tool: ${call.name}');
       } else {
         try {
-          final result = await webSearch(
-            query: query,
-            tavilyKey: settings.tavilyKey,
-            log: (line) => onLog?.call('  $line'),
-          );
-          resultText = _formatResults(result);
-        } on WebSearchException catch (e) {
-          resultText = 'Search failed: ${e.message}';
+          resultText = await def.handler(call.input, settings, onLog);
         } catch (e) {
-          resultText = 'Search error: $e';
+          resultText = 'Tool ${call.name} error: $e';
         }
       }
-
       history.add(_toolResultMessage(provider, call.id, resultText));
     }
   }
 
   throw Exception('Агент превысил лимит итераций ($_maxIterations).');
-}
-
-String _formatResults(WebSearchResult r) {
-  final buf = StringBuffer('Provider: ${r.provider.name}\n');
-  for (var i = 0; i < r.hits.length; i++) {
-    final h = r.hits[i];
-    buf.writeln('---');
-    buf.writeln('[${i + 1}] ${h.title}');
-    buf.writeln(h.url);
-    buf.writeln(h.snippet);
-  }
-  return buf.toString();
 }
 
 String _llmKey(String provider, GlobalSettings s) {
@@ -119,8 +230,9 @@ String _llmKey(String provider, GlobalSettings s) {
 
 class _ToolCall {
   final String id;
+  final String name;
   final Map<String, dynamic> input;
-  _ToolCall(this.id, this.input);
+  _ToolCall(this.id, this.name, this.input);
 }
 
 class _LlmResponse {
@@ -165,19 +277,13 @@ Future<_LlmResponse> _callAnthropic(String model, String key,
     'max_tokens': 1024,
     if (systemPrompt.isNotEmpty) 'system': systemPrompt,
     'messages': history,
-    'tools': [
-      {
-        'name': _toolName,
-        'description': _toolDescription,
-        'input_schema': {
-          'type': 'object',
-          'properties': {
-            'query': {'type': 'string', 'description': 'Search query'},
-          },
-          'required': ['query'],
-        },
-      },
-    ],
+    'tools': _tools.entries
+        .map((e) => {
+              'name': e.key,
+              'description': e.value.description,
+              'input_schema': e.value.schema,
+            })
+        .toList(),
   };
 
   final r = await http.post(
@@ -201,11 +307,15 @@ Future<_LlmResponse> _callAnthropic(String model, String key,
   for (final block in content.whereType<Map<String, dynamic>>()) {
     if (block['type'] == 'text') {
       textParts.add(block['text'] as String? ?? '');
-    } else if (block['type'] == 'tool_use' && block['name'] == _toolName) {
-      calls.add(_ToolCall(
-        block['id'] as String? ?? '',
-        (block['input'] as Map<String, dynamic>?) ?? {},
-      ));
+    } else if (block['type'] == 'tool_use') {
+      final name = block['name'] as String? ?? '';
+      if (_tools.containsKey(name)) {
+        calls.add(_ToolCall(
+          block['id'] as String? ?? '',
+          name,
+          (block['input'] as Map<String, dynamic>?) ?? {},
+        ));
+      }
     }
   }
 
@@ -235,22 +345,16 @@ Future<_LlmResponse> _callOpenAiCompat(String provider, String model,
   final body = <String, dynamic>{
     'model': model,
     'messages': messages,
-    'tools': [
-      {
-        'type': 'function',
-        'function': {
-          'name': _toolName,
-          'description': _toolDescription,
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'query': {'type': 'string', 'description': 'Search query'},
-            },
-            'required': ['query'],
-          },
-        },
-      },
-    ],
+    'tools': _tools.entries
+        .map((e) => {
+              'type': 'function',
+              'function': {
+                'name': e.key,
+                'description': e.value.description,
+                'parameters': e.value.schema,
+              },
+            })
+        .toList(),
   };
 
   final r = await http.post(
@@ -279,7 +383,8 @@ Future<_LlmResponse> _callOpenAiCompat(String provider, String model,
   final calls = <_ToolCall>[];
   for (final tc in toolCallsRaw.whereType<Map<String, dynamic>>()) {
     final fn = tc['function'] as Map<String, dynamic>? ?? {};
-    if (fn['name'] != _toolName) continue;
+    final name = fn['name'] as String? ?? '';
+    if (!_tools.containsKey(name)) continue;
     Map<String, dynamic> args = {};
     final argsRaw = fn['arguments'];
     if (argsRaw is String && argsRaw.isNotEmpty) {
@@ -289,7 +394,7 @@ Future<_LlmResponse> _callOpenAiCompat(String provider, String model,
     } else if (argsRaw is Map<String, dynamic>) {
       args = argsRaw;
     }
-    calls.add(_ToolCall(tc['id'] as String? ?? '', args));
+    calls.add(_ToolCall(tc['id'] as String? ?? '', name, args));
   }
 
   return _LlmResponse(

@@ -125,6 +125,94 @@ Future<List<WebSearchHit>> _tavilySearch(
       .toList();
 }
 
+// ── Tavily Extract ─────────────────────────────────────────────────────────
+// Pulls raw text from one or more URLs. Tavily-only (no DDG fallback — DDG
+// doesn't offer extract).
+
+class TavilyExtractResult {
+  final String url;
+  final String rawContent;
+  const TavilyExtractResult({required this.url, required this.rawContent});
+  Map<String, dynamic> toJson() => {'url': url, 'rawContent': rawContent};
+}
+
+Future<List<TavilyExtractResult>> tavilyExtract({
+  required List<String> urls,
+  required String tavilyKey,
+}) async {
+  if (tavilyKey.isEmpty) {
+    throw WebSearchException('Tavily: ключ не задан (extract требует ключ)');
+  }
+  if (urls.isEmpty) {
+    throw WebSearchException('Tavily extract: пустой список URL');
+  }
+  final response = await http.post(
+    Uri.parse('https://api.tavily.com/extract'),
+    headers: {'content-type': 'application/json'},
+    body: jsonEncode({
+      'api_key': tavilyKey,
+      'urls': urls,
+    }),
+  );
+  if (response.statusCode != 200) {
+    throw WebSearchException(
+        'Tavily extract HTTP ${response.statusCode}: ${response.body}');
+  }
+  final json = jsonDecode(response.body) as Map<String, dynamic>;
+  final results = (json['results'] as List? ?? []);
+  return results
+      .whereType<Map<String, dynamic>>()
+      .map((r) => TavilyExtractResult(
+            url: r['url'] as String? ?? '',
+            rawContent: r['raw_content'] as String? ?? '',
+          ))
+      .toList();
+}
+
+// ── Tavily Crawl ───────────────────────────────────────────────────────────
+// Walks a site starting from a URL. Tavily-only.
+
+class TavilyCrawlResult {
+  final String url;
+  final String rawContent;
+  const TavilyCrawlResult({required this.url, required this.rawContent});
+  Map<String, dynamic> toJson() => {'url': url, 'rawContent': rawContent};
+}
+
+Future<List<TavilyCrawlResult>> tavilyCrawl({
+  required String startUrl,
+  required String tavilyKey,
+  int maxDepth = 1,
+  int limit = 20,
+}) async {
+  if (tavilyKey.isEmpty) {
+    throw WebSearchException('Tavily: ключ не задан (crawl требует ключ)');
+  }
+  final response = await http.post(
+    Uri.parse('https://api.tavily.com/crawl'),
+    headers: {'content-type': 'application/json'},
+    body: jsonEncode({
+      'api_key': tavilyKey,
+      'url': startUrl,
+      'max_depth': maxDepth,
+      'limit': limit,
+    }),
+  );
+  if (response.statusCode != 200) {
+    throw WebSearchException(
+        'Tavily crawl HTTP ${response.statusCode}: ${response.body}');
+  }
+  final json = jsonDecode(response.body) as Map<String, dynamic>;
+  final results = (json['results'] as List? ?? []);
+  return results
+      .whereType<Map<String, dynamic>>()
+      .map((r) => TavilyCrawlResult(
+            url: r['url'] as String? ?? '',
+            rawContent: r['raw_content'] as String? ?? '',
+          ))
+      .toList();
+}
+
 // ── DuckDuckGo (Instant Answer API + HTML lite parser) ─────────────────────
 
 Future<List<WebSearchHit>> _duckDuckGoSearch(String query, int max) async {

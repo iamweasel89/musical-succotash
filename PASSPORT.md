@@ -128,7 +128,7 @@ lib/
 | Дерево решений — экран в Мастерской, экспорт md (Т1, Т2, Т4) | готово |
 | Инбокс-экран — просмотр documents/inbox/ (О2) | готово |
 | Поиск по нодам — SearchScreen, переход к цепочке | готово |
-| Веб-поиск — комната Мастерской, агент с web_search, Tavily/DDG, история (ПО1–ПО4) | готово |
+| Веб-поиск — комната Мастерской, агент с web_search + web_extract + web_crawl (Tavily), DDG fallback, история | готово |
 | Справка — комната Мастерской (термины: тезис, канва, инбокс, мастерская, debug) | готово |
 | Отладка — debug HTTP-сервер (GET /state /screenshot /logs ...), тумблер + IP-список + токен | готово |
 | Auth-токен debug-сервера (ОТ3) — header X-Debug-Token, POST /action/* framework с ping | готово |
@@ -254,11 +254,13 @@ lib/
 - ОТ3 ✓ auth-токен — 32-байтовый hex, заголовок X-Debug-Token / ?token=; публично только / и /ips
 - ОТ4  hot-reload дампа — принудительный дамп текущей ветки чата в inbox по запросу Claude
 
-**МЦ — MCP-клиент**
+**МЦ — MCP-клиент** *(отложено; phase А сделано — extract+crawl через прямой Tavily API)*
+- МЦ0 ✓ фаза A (не-MCP): tavilyExtract + tavilyCrawl прямым API в web_search.dart + агент 3 инструмента
 - МЦ1  базовый MCP-клиент — JSON-RPC через HTTP/SSE, initialize, list_tools, call_tool
 - МЦ2  конфиг-экран — список MCP-серверов (URL + токен/ключ) в настройках
-- МЦ3  замена прямого Tavily на Tavily MCP — extract / crawl / news в дополнение к search
-- МЦ4  расширение на сторонние серверы (GitHub MCP, Notion MCP, Figma MCP, собственные)
+- МЦ3  замена прямого Tavily на Tavily MCP — инструменты подтягиваются динамически через protocol
+- МЦ4  расширение на сторонние серверы (GitHub MCP, Notion MCP, Figma MCP)
+- МЦ5  собственный MCP-сервер hex-canvas — экспозит дампы/канвы/тезисы внешним LLM-клиентам
 
 **Ц — CI/CD**
 - Ц1 ✓ обфускация APK (--obfuscate + --split-debug-info)
