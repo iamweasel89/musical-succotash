@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -10,6 +13,7 @@ import 'canvas/canvas_view.dart';
 import 'chat_screen.dart';
 import 'models/app_model.dart';
 import 'search_screen.dart';
+import 'services/debug_server.dart';
 import 'widgets/settings_sheet.dart';
 
 class MainScreen extends StatefulWidget {
@@ -127,6 +131,68 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _tab = 0);
   }
 
+  // ── Share snapshot with Claude (ВИ1 фаза 1) ───────────────────────────────
+
+  Future<void> _shareWithClaude() async {
+    try {
+      // State snapshot (same shape as debug /state)
+      final m = widget.model;
+      final state = <String, dynamic>{
+        'timestamp': DateTime.now().toIso8601String(),
+        'activeCanvas': {
+          'id': m.activeCanvasId,
+          'name': m.activeCanvas.name,
+          'nodeCount': m.activeCanvasNodes.length,
+          'edgeCount': m.activeCanvasEdges.length,
+        },
+        'counts': {
+          'canvases': m.canvases.length,
+          'nodes': m.nodes.length,
+          'edges': m.edges.length,
+          'theses': m.theses.length,
+          'decisions': m.decisions.length,
+          'webSearchMessages': m.webSearchMessages.length,
+        },
+        'chainPathLength': m.chainPath.length,
+        'currentTab': _tab == 0 ? 'chat' : 'canvas',
+      };
+      final text = 'hex-canvas snapshot for Claude\n\n' +
+          const JsonEncoder.withIndent('  ').convert(state);
+
+      // Screenshot of root widget
+      Uint8List? pngBytes;
+      try {
+        final ctx = DebugServer.screenshotKey.currentContext;
+        final boundary = ctx?.findRenderObject();
+        if (boundary is RenderRepaintBoundary) {
+          final ui.Image img = await boundary.toImage(pixelRatio: 2.0);
+          final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+          pngBytes = byteData?.buffer.asUint8List();
+        }
+      } catch (_) {}
+
+      if (pngBytes != null) {
+        final dir = await getTemporaryDirectory();
+        final file = File(
+            '${dir.path}/hex-snapshot-${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(pngBytes);
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: 'image/png')],
+          text: text,
+          subject: 'hex-canvas snapshot',
+        );
+      } else {
+        await Share.share(text, subject: 'hex-canvas snapshot');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e')),
+        );
+      }
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -135,6 +201,11 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: const Text('Hex Canvas'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: 'Показать Claude',
+            onPressed: _shareWithClaude,
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'Поиск',
