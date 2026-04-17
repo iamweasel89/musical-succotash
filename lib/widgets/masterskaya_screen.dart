@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_model.dart';
+import 'cases_screen.dart';
 import 'debug_screen.dart';
 import 'decision_tree_screen.dart';
 import 'excerpt_extractor.dart';
@@ -127,6 +128,14 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'Локальные таймеры с уведомлениями',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => RemindersScreen(model: model),
+            )),
+          ),
+          _Room(
+            icon: Icons.collections_bookmark_outlined,
+            title: 'Кейсы',
+            subtitle: 'База проектных решений (cases/ в репо)',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const CasesScreen(),
             )),
           ),
         ],
