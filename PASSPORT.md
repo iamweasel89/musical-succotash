@@ -360,7 +360,7 @@ lib/
 - Р3 расщепить `settings_sheet.dart` (860 строк) по секциям — `settings/api_keys_section.dart`, `settings/components_section.dart`, `settings/chat_section.dart` и т.п.
 - Р4 sub-managers под AppModel — `ThesisManager`, `DecisionManager`, `WebSearchManager` в `models/managers/`; AppModel становится агрегатором
 - Р5 базовые тесты — happy-path по критическим сервисам (`llm_transform`, `agent_runner`, `web_search`); сейчас один `app_model_test.dart`
-- Р6 seed-данные Decision tree вынести в JSON-файл (сейчас ~180 строк хардкода в `app_model.dart`)
+- Р6 ✓ seed-данные Decision tree вынесены в `assets/seed/decisions.json`; `app_model.dart` сократился с 710 до 640 строк
 - Р7 каталог переиспользуемых UI — папка `widgets/shared/` (compress_sheet уже подходит по смыслу); чтобы не повторялось как было с `_CompressSheet`
 
 **Ш — Защита системы** *(обсудить перед внедрением)*
