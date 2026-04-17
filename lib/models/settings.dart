@@ -27,6 +27,10 @@ class GlobalSettings {
   // Hide the "добавить тезис" button on chat bubbles
   bool hideThesisButton;
 
+  // Debug HTTP server (read-only introspection + screenshot)
+  bool debugServerEnabled;
+  int debugServerPort;
+
   // Token usage totals (cumulative)
   int tokensInAnthropicTotal;
   int tokensOutAnthropicTotal;
@@ -55,6 +59,8 @@ class GlobalSettings {
     this.showBubbleTime = false,
     this.showBubbleId = false,
     this.hideThesisButton = false,
+    this.debugServerEnabled = false,
+    this.debugServerPort = 8080,
     this.tokensInAnthropicTotal = 0,
     this.tokensOutAnthropicTotal = 0,
     this.tokensInOpenaiTotal = 0,
@@ -83,6 +89,8 @@ class GlobalSettings {
         'showBubbleTime': showBubbleTime,
         'showBubbleId': showBubbleId,
         'hideThesisButton': hideThesisButton,
+        'debugServerEnabled': debugServerEnabled,
+        'debugServerPort': debugServerPort,
         'tokensInAnthropicTotal': tokensInAnthropicTotal,
         'tokensOutAnthropicTotal': tokensOutAnthropicTotal,
         'tokensInOpenaiTotal': tokensInOpenaiTotal,
@@ -111,6 +119,8 @@ class GlobalSettings {
         showBubbleTime: j['showBubbleTime'] as bool? ?? false,
         showBubbleId: j['showBubbleId'] as bool? ?? false,
         hideThesisButton: j['hideThesisButton'] as bool? ?? false,
+        debugServerEnabled: j['debugServerEnabled'] as bool? ?? false,
+        debugServerPort: j['debugServerPort'] as int? ?? 8080,
         tokensInAnthropicTotal: j['tokensInAnthropicTotal'] as int? ?? 0,
         tokensOutAnthropicTotal: j['tokensOutAnthropicTotal'] as int? ?? 0,
         tokensInOpenaiTotal: j['tokensInOpenaiTotal'] as int? ?? 0,

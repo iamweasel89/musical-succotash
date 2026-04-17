@@ -3,6 +3,12 @@ name: Build
 on:
   push:
     branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force publish release even outside main branch'
+        type: boolean
+        default: false
 
 jobs:
   android:
@@ -53,7 +59,7 @@ jobs:
           retention-days: 90
 
       - name: Publish GitHub release
-        if: github.ref == 'refs/heads/claude/hex-canvas-mobile-08MeM'
+        if: github.ref == 'refs/heads/claude/hex-canvas-mobile-08MeM' || inputs.force_release == true
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk hex-canvas.apk
           gh release create "build-${{ github.run_number }}" \

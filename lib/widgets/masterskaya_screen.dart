@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_model.dart';
+import 'debug_screen.dart';
 import 'decision_tree_screen.dart';
 import 'excerpt_extractor.dart';
 import 'help_screen.dart';
@@ -100,6 +101,14 @@ class MasterskayaScreen extends StatelessWidget {
             subtitle: 'Термины: тезис, канва, инбокс, мастерская',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => const HelpScreen(),
+            )),
+          ),
+          _Room(
+            icon: Icons.bug_report_outlined,
+            title: 'Отладка',
+            subtitle: 'HTTP-сервер состояния + скриншот для Claude Code',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => DebugScreen(model: model),
             )),
           ),
         ],

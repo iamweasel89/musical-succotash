@@ -13,7 +13,7 @@
 - **Канва** — гексагональная сетка, ноды (текст/API), рёбра, мультиканвас
 - **Чат** — ветвящийся диалог с LLM, каждое сообщение = нода на канве
 
-Плюс **Мастерская** (вход из настроек) — экран-хаб с комнатами: извлечение отрывков, режим тезисов, дерево решений, инбокс.
+Плюс **Мастерская** (вход из настроек) — экран-хаб с комнатами: извлечение отрывков, режим тезисов, дерево решений, инбокс, веб-поиск, справка, отладка.
 Поиск по нодам — из тулбара главного экрана.
 
 ---
@@ -83,6 +83,7 @@ lib/
     api_runner.dart              — callLlm(), streaming, multi-provider
     agent_runner.dart            — runAgentTurn() с tool_use циклом (web_search)
     web_search.dart              — Tavily + DuckDuckGo с fallback и логом
+    debug_server.dart            — HTTP-сервер состояния (GET), опционально
     dump_service.dart            — DumpService.saveDump() → documents/inbox/*.md
     logger.dart                  — AppLogger (ring-buffer in-memory log)
     updater.dart                 — AppUpdater (проверка/скачивание/установка APK)
@@ -92,11 +93,13 @@ lib/
     hex_painter.dart             — CustomPainter (grid, nodes, edges)
     hex_math.dart                — hexToWorld, worldToHex
   widgets/
-    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск
+    masterskaya_screen.dart      — Мастерская (хаб): отрывки / тезисы / дерево / инбокс / веб-поиск / справка / отладка
     thesis_workshop_screen.dart  — режим тезисов (Я1–Я8)
     decision_tree_screen.dart    — дерево решений (Т1–Т5)
     inbox_screen.dart            — просмотр documents/inbox/ (О2)
     web_search_screen.dart       — комната веб-поиска (ПО): чат-агент с tool_use, история, настройки
+    help_screen.dart             — справка: термины (тезис, канва, инбокс, мастерская, debug)
+    debug_screen.dart            — управление debug HTTP-сервером: toggle, IP-список, endpoints
     excerpt_extractor.dart       — свайп-выделение слов, буфер, инерция
     settings_sheet.dart          — настройки (bottom sheet); вход в Мастерскую
     api_node_sheet.dart          — настройки API-ноды
@@ -116,12 +119,17 @@ lib/
 | ExcerptExtractor — свайп-выделение, буфер, инерция, розовый фон | готово |
 | Параграфный hysteresis в экстракторе (Э2) | готово |
 | DumpService — дамп ветки в documents/inbox/ | готово |
-| Мастерская — экран-хаб, 4 комнаты (отрывки/тезисы/дерево/инбокс) | готово |
+| Мастерская — экран-хаб, 7 комнат (отрывки/тезисы/дерево/инбокс/веб-поиск/справка/отладка) | готово |
 | Режим тезисов — карточки, формулировка, ответ (Я1, Я2, Я5, Я7) | готово |
 | Дерево решений — экран в Мастерской, экспорт md (Т1, Т2, Т4) | готово |
 | Инбокс-экран — просмотр documents/inbox/ (О2) | готово |
 | Поиск по нодам — SearchScreen, переход к цепочке | готово |
 | Веб-поиск — комната Мастерской, агент с web_search, Tavily/DDG, история (ПО1–ПО4) | готово |
+| Справка — комната Мастерской (термины: тезис, канва, инбокс, мастерская, debug) | готово |
+| Отладка — debug HTTP-сервер (GET /state /screenshot /logs ...), тумблер + IP-список | готово |
+| Обфускация APK (--obfuscate + --split-debug-info), символы в артефакт CI | готово |
+| workflow_dispatch — ручной триггер release в обход ветки | готово |
+| Скрытие кнопки тезиса на пузыре — флаг в настройках | готово |
 | Автообновление APK — AppUpdater | готово |
 | Логгер + LogSheet | готово |
 | CanvasData.createdAt | готово |
@@ -204,6 +212,24 @@ lib/
 
 **А — Асинхронный режим**
 - А1  обсудить архитектуру — состояние в артефакте, не в heads
+
+**ОТ — Отладочный API**
+- ОТ1 ✓ debug HTTP-сервер — GET /state /settings /logs /canvas /theses /decisions /websearch /ips /screenshot; тумблер в Мастерской; биндится 0.0.0.0 (LAN + Tailscale)
+- ОТ2  remote-control endpoints — POST /action/tap, /action/openSettings, /action/sendMessage (Claude может не только читать, но и действовать)
+- ОТ3  auth-токен для сервера — одноразовый код в настройках, проверяется в заголовке; защита от чужих в той же сети
+- ОТ4  hot-reload дампа — принудительный дамп текущей ветки чата в inbox по запросу Claude
+
+**МЦ — MCP-клиент**
+- МЦ1  базовый MCP-клиент — JSON-RPC через HTTP/SSE, initialize, list_tools, call_tool
+- МЦ2  конфиг-экран — список MCP-серверов (URL + токен/ключ) в настройках
+- МЦ3  замена прямого Tavily на Tavily MCP — extract / crawl / news в дополнение к search
+- МЦ4  расширение на сторонние серверы (GitHub MCP, Notion MCP, Figma MCP, собственные)
+
+**Ц — CI/CD**
+- Ц1 ✓ обфускация APK (--obfuscate + --split-debug-info)
+- Ц2 ✓ workflow_dispatch для ручного release
+- Ц3  branch protection на hex-canvas-mobile-08MeM — требовать зелёный CI перед push (настройка GitHub UI)
+- Ц4  артефакт symbols в релизе, чтобы стек-трейсы можно было демаппинг
 
 **Ш — Защита системы** *(обсудить перед внедрением)*
 - Ш1  пин/биометрия при запуске

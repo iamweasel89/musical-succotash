@@ -3,12 +3,17 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'main_screen.dart';
 import 'models/app_model.dart';
+import 'services/debug_server.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await Hive.openBox<String>('state');
   final model = AppModel()..load();
+  if (model.settings.debugServerEnabled) {
+    // Fire-and-forget; errors are logged inside DebugServer.
+    DebugServer.start(model, model.settings.debugServerPort);
+  }
   runApp(HexCanvasApp(model: model));
 }
 
@@ -25,7 +30,10 @@ class HexCanvasApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
         useMaterial3: true,
       ),
-      home: MainScreen(model: model),
+      home: RepaintBoundary(
+        key: DebugServer.screenshotKey,
+        child: MainScreen(model: model),
+      ),
     );
   }
 }
