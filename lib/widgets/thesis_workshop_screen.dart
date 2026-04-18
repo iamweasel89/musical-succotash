@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_model.dart';
 import '../models/hex_pos.dart';
 import '../models/node.dart';
+import '../models/screen_snapshot.dart';
 import '../models/thesis_entry.dart';
 import '../services/api_runner.dart';
 import '../services/dump_service.dart';
@@ -19,13 +20,14 @@ class ThesisWorkshopScreen extends StatefulWidget {
   State<ThesisWorkshopScreen> createState() => _ThesisWorkshopScreenState();
 }
 
-class _ThesisWorkshopScreenState extends State<ThesisWorkshopScreen> {
+class _ThesisWorkshopScreenState extends State<ThesisWorkshopScreen>
+    implements ScreenSnapshotProvider {
   List<ThesisEntry> get _theses => widget.model.theses;
 
   @override
   void initState() {
     super.initState();
-    widget.model.pushScreen('thesis-workshop');
+    widget.model.pushScreen('thesis-workshop', provider: this);
   }
 
   @override
@@ -33,6 +35,26 @@ class _ThesisWorkshopScreenState extends State<ThesisWorkshopScreen> {
     widget.model.popScreen();
     super.dispose();
   }
+
+  @override
+  String get screenName => 'thesis-workshop';
+
+  @override
+  Map<String, dynamic> capture() => {
+        'kind': 'thesis-workshop',
+        'title': 'Режим тезисов',
+        'count': _theses.length,
+        'items': _theses
+            .take(20)
+            .map((t) => {
+                  'thesis': t.thesis.length > 160
+                      ? '${t.thesis.substring(0, 160)}…'
+                      : t.thesis,
+                  'hasAnswer': t.answer.isNotEmpty,
+                  'sourceNodeId': t.sourceNodeId,
+                })
+            .toList(),
+      };
 
   Future<void> _save() async {
     if (_theses.isEmpty) return;

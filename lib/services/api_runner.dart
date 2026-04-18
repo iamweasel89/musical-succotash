@@ -139,8 +139,12 @@ const _builtinPromptBody =
 
 String _effectiveSystemPrompt(GlobalSettings s) {
   final parts = <String>[];
+  // ВР-минимум: время/сессия всегда в системном промпте, независимо от
+  // того включён ли встроенный preamble. Пара десятков токенов, данные
+  // всегда актуальны, отключать незачем (см. п.292).
+  parts.add(_timeContext());
   if (s.useBuiltinSystemPrompt) {
-    parts.add('${_timeContext()}$_builtinPromptBody');
+    parts.add(_builtinPromptBody);
   }
   if (s.defaultSystemPrompt.isNotEmpty) {
     parts.add(s.defaultSystemPrompt);

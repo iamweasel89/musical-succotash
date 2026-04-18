@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_model.dart';
+import '../models/screen_snapshot.dart';
 import 'cases_screen.dart';
 import 'debug_screen.dart';
 import 'decision_tree_screen.dart';
@@ -22,13 +23,27 @@ class MasterskayaScreen extends StatefulWidget {
   State<MasterskayaScreen> createState() => _MasterskayaScreenState();
 }
 
-class _MasterskayaScreenState extends State<MasterskayaScreen> {
+class _MasterskayaScreenState extends State<MasterskayaScreen>
+    implements ScreenSnapshotProvider {
   AppModel get model => widget.model;
+
+  static const _rooms = [
+    'Извлечение отрывков',
+    'Режим тезисов',
+    'Дерево решений',
+    'Веб-поиск',
+    'Inbox',
+    'Help',
+    'Разработки',
+    'Кейсы',
+    'Напоминания',
+    'Отладка',
+  ];
 
   @override
   void initState() {
     super.initState();
-    model.pushScreen('masterskaya');
+    model.pushScreen('masterskaya', provider: this);
   }
 
   @override
@@ -36,6 +51,16 @@ class _MasterskayaScreenState extends State<MasterskayaScreen> {
     model.popScreen();
     super.dispose();
   }
+
+  @override
+  String get screenName => 'masterskaya';
+
+  @override
+  Map<String, dynamic> capture() => {
+        'kind': 'masterskaya',
+        'title': 'Мастерская',
+        'rooms': _rooms,
+      };
 
   static const _excerptText =
       'Это экспериментальный режим извлечения текста.\n\n'

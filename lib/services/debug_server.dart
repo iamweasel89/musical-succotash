@@ -289,6 +289,8 @@ class DebugServer {
       'tavilyKey': mask(s.tavilyKey),
       'defaultProvider': s.defaultProvider,
       'defaultModel': s.defaultModel,
+      'useBuiltinSystemPrompt': s.useBuiltinSystemPrompt,
+      'defaultSystemPrompt': s.defaultSystemPrompt,
       'streamingMode': s.streamingMode,
       'renderMarkdown': s.renderMarkdown,
       'hideEmoji': s.hideEmoji,

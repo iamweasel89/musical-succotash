@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'canvas/canvas_view.dart';
+import 'chat/routes.dart';
 import 'chat_screen.dart';
 import 'models/app_model.dart';
 import 'search_screen.dart';
@@ -59,12 +60,57 @@ class _MainScreenState extends State<MainScreen> {
       }
       return {'done': true, 'popped': popped, 'currentScreen': model.currentScreen};
     });
+    DebugServer.registerAction('ui.back', (model, args) async {
+      if (!mounted) return {'done': false, 'reason': 'not mounted'};
+      final nav = Navigator.of(context);
+      if (!nav.canPop()) {
+        return {'done': false, 'reason': 'nothing to pop'};
+      }
+      nav.pop();
+      return {'done': true};
+    });
+    DebugServer.registerAction('ui.navigate', (model, args) async {
+      if (!mounted) return {'done': false, 'reason': 'not mounted'};
+      final raw = args['path'];
+      if (raw is! List) {
+        return {'done': false, 'reason': 'path must be list of screen names'};
+      }
+      final path = raw.whereType<String>().toList();
+      if (path.isEmpty) return {'done': false, 'reason': 'empty path'};
+      // Проверим все имена: первое — chat|canvas, остальные — из chatRoutes.
+      final base = path.first;
+      if (base != 'chat' && base != 'canvas') {
+        return {'done': false, 'reason': 'first segment must be chat or canvas'};
+      }
+      for (final name in path.skip(1)) {
+        if (!chatRoutes.containsKey(name)) {
+          return {'done': false, 'reason': 'unknown screen: $name'};
+        }
+      }
+      // Схлопываем стек до корня.
+      final nav = Navigator.of(context);
+      while (nav.canPop()) {
+        nav.pop();
+      }
+      // Устанавливаем базовый таб.
+      final tabIdx = base == 'canvas' ? 1 : 0;
+      setState(() => _tab = tabIdx);
+      widget.model.setBaseScreen(base);
+      // Пушим остальные.
+      for (final name in path.skip(1)) {
+        final builder = chatRoutes[name]!(widget.model);
+        await nav.push(MaterialPageRoute(builder: builder));
+      }
+      return {'done': true, 'finalScreen': model.currentScreen};
+    });
   }
 
   @override
   void dispose() {
     DebugServer.unregisterAction('ui.switchTab');
     DebugServer.unregisterAction('ui.popToRoot');
+    DebugServer.unregisterAction('ui.back');
+    DebugServer.unregisterAction('ui.navigate');
     super.dispose();
   }
 

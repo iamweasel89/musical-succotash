@@ -67,6 +67,8 @@ class _SettingsSheetState extends State<SettingsSheet>
       'title': 'Настройки',
       'defaultProvider': s.defaultProvider,
       'defaultModel': s.defaultModel,
+      'useBuiltinSystemPrompt': s.useBuiltinSystemPrompt,
+      'defaultSystemPrompt': s.defaultSystemPrompt,
       'streamingMode': s.streamingMode,
       'renderMarkdown': s.renderMarkdown,
       'hideEmoji': s.hideEmoji,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_model.dart';
+import '../models/screen_snapshot.dart';
 import '../services/debug_server.dart';
 import 'shared/compress_sheet.dart';
 
@@ -23,7 +24,8 @@ class DebugScreen extends StatefulWidget {
   State<DebugScreen> createState() => _DebugScreenState();
 }
 
-class _DebugScreenState extends State<DebugScreen> {
+class _DebugScreenState extends State<DebugScreen>
+    implements ScreenSnapshotProvider {
   List<Map<String, dynamic>> _ips = [];
   String? _startError;
 
@@ -32,10 +34,27 @@ class _DebugScreenState extends State<DebugScreen> {
     super.initState();
     DebugServer.addListener(_onServerChange);
     _refreshIps();
+    widget.model.pushScreen('debug', provider: this);
   }
 
   @override
+  String get screenName => 'debug';
+
+  @override
+  Map<String, dynamic> capture() => {
+        'kind': 'debug',
+        'title': 'Отладка',
+        'serverEnabled': widget.model.settings.debugServerEnabled,
+        'serverPort': widget.model.settings.debugServerPort,
+        'running': DebugServer.isRunning,
+        'ipCount': _ips.length,
+        'registeredActions': DebugServer.listActions(),
+        'startError': _startError,
+      };
+
+  @override
   void dispose() {
+    widget.model.popScreen();
     DebugServer.removeListener(_onServerChange);
     super.dispose();
   }

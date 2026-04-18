@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 
 import '../models/settings.dart';
 import 'llm_client.dart';
@@ -175,7 +178,133 @@ final Map<String, _ToolDef> _tools = {
       }
     },
   ),
+  'fetch_rss': _ToolDef(
+    'Fetch an RSS/Atom feed by URL and return parsed items (title, link, '
+        'date, snippet). Optionally filter by keyword (case-insensitive). '
+        'Useful for: LJ comments, Habr user, podcasts, GitHub releases, '
+        'blog feeds. Works where web_search does not penetrate deeply.',
+    {
+      'type': 'object',
+      'properties': {
+        'url': {'type': 'string', 'description': 'RSS or Atom feed URL'},
+        'keyword': {
+          'type': 'string',
+          'description':
+              'Optional case-insensitive substring; only items containing '
+                  'it in title/description are returned',
+        },
+        'limit': {
+          'type': 'integer',
+          'description': 'Max items to return (default 20)',
+        },
+      },
+      'required': ['url'],
+    },
+    (args, s, log, onTokens) async {
+      final url = (args['url'] as String?)?.trim() ?? '';
+      if (url.isEmpty) return 'Empty url.';
+      final keyword = ((args['keyword'] as String?) ?? '').trim().toLowerCase();
+      final limit = args['limit'] is int ? args['limit'] as int : 20;
+      log?.call('📰 fetch_rss: $url${keyword.isEmpty ? '' : ' [$keyword]'}');
+      try {
+        final items = await _fetchRss(url);
+        final filtered = keyword.isEmpty
+            ? items
+            : items.where((it) {
+                final blob =
+                    '${it['title']} ${it['description']}'.toLowerCase();
+                return blob.contains(keyword);
+              }).toList();
+        final taken = filtered.take(limit).toList();
+        if (taken.isEmpty) {
+          return keyword.isEmpty
+              ? 'No items found in feed.'
+              : 'No items matching "$keyword" (scanned ${items.length}).';
+        }
+        log?.call('  получено ${items.length}, отфильтровано ${taken.length}');
+        final buf = StringBuffer();
+        buf.writeln('Feed: $url (${taken.length}/${items.length} shown)');
+        for (var i = 0; i < taken.length; i++) {
+          final it = taken[i];
+          buf.writeln('---');
+          buf.writeln('[${i + 1}] ${it['title']}');
+          if (it['link'] != '') buf.writeln(it['link']);
+          if (it['date'] != '') buf.writeln('(${it['date']})');
+          final desc = (it['description'] as String);
+          if (desc.isNotEmpty) {
+            buf.writeln(desc.length > 400
+                ? '${desc.substring(0, 400)}…'
+                : desc);
+          }
+        }
+        return buf.toString();
+      } catch (e) {
+        return 'RSS fetch error: $e';
+      }
+    },
+  ),
 };
+
+// Минимальный парсер RSS/Atom: регулярки по <item>/<entry> блокам и
+// извлечение title/link/description/date. Без внешних зависимостей —
+// покрывает 90% фидов (LJ comments, Habr, GitHub releases, большинство
+// блогов). Если фид сломан/пустой — возвращаем пустой список.
+Future<List<Map<String, String>>> _fetchRss(String url) async {
+  final resp = await http.get(Uri.parse(url), headers: const {
+    'User-Agent': 'hex-canvas-mobile/1.0 (+fetch_rss tool)',
+    'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+  });
+  if (resp.statusCode < 200 || resp.statusCode >= 300) {
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+  final body = utf8.decode(resp.bodyBytes, allowMalformed: true);
+  // RSS 2.0: <item>…</item>; Atom: <entry>…</entry>.
+  final itemRe =
+      RegExp(r'<(item|entry)\b[^>]*>([\s\S]*?)</\1>', caseSensitive: false);
+  final out = <Map<String, String>>[];
+  for (final m in itemRe.allMatches(body)) {
+    final block = m.group(2) ?? '';
+    out.add({
+      'title': _stripTags(_tag(block, 'title')),
+      'link': _extractLink(block),
+      'description':
+          _stripTags(_tag(block, 'description').isNotEmpty
+              ? _tag(block, 'description')
+              : _tag(block, 'summary').isNotEmpty
+                  ? _tag(block, 'summary')
+                  : _tag(block, 'content')),
+      'date': _tag(block, 'pubDate').isNotEmpty
+          ? _tag(block, 'pubDate')
+          : _tag(block, 'updated').isNotEmpty
+              ? _tag(block, 'updated')
+              : _tag(block, 'published'),
+    });
+  }
+  return out;
+}
+
+String _tag(String block, String name) {
+  final re = RegExp('<$name\\b[^>]*>([\\s\\S]*?)</$name>',
+      caseSensitive: false);
+  final m = re.firstMatch(block);
+  if (m == null) return '';
+  var v = m.group(1) ?? '';
+  // CDATA unwrap
+  final cdata = RegExp(r'<!\[CDATA\[([\s\S]*?)\]\]>');
+  v = v.replaceAllMapped(cdata, (c) => c.group(1) ?? '');
+  return v.trim();
+}
+
+String _extractLink(String block) {
+  // Atom: <link href="…"/>; RSS: <link>…</link>.
+  final atom = RegExp(r'<link\b[^>]*href="([^"]+)"', caseSensitive: false);
+  final m = atom.firstMatch(block);
+  if (m != null) return m.group(1) ?? '';
+  return _tag(block, 'link');
+}
+
+String _stripTags(String s) =>
+    s.replaceAll(RegExp(r'<[^>]+>'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
 
 String _truncate(String s, int limit) {
   if (s.length <= limit) return s;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_model.dart';
 import '../models/reminder.dart';
+import '../models/screen_snapshot.dart';
 import '../services/reminder_service.dart';
 
 // ── Мастерская: Напоминания (ВР4.3–4.4) ──────────────────────────────────────
@@ -14,11 +15,49 @@ class RemindersScreen extends StatefulWidget {
   State<RemindersScreen> createState() => _RemindersScreenState();
 }
 
-class _RemindersScreenState extends State<RemindersScreen> {
+class _RemindersScreenState extends State<RemindersScreen>
+    implements ScreenSnapshotProvider {
   List<Reminder> get _reminders {
     final list = List<Reminder>.from(widget.model.reminders);
     list.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     return list;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.model.pushScreen('reminders', provider: this);
+  }
+
+  @override
+  void dispose() {
+    widget.model.popScreen();
+    super.dispose();
+  }
+
+  @override
+  String get screenName => 'reminders';
+
+  @override
+  Map<String, dynamic> capture() {
+    final list = _reminders;
+    final now = DateTime.now();
+    return {
+      'kind': 'reminders',
+      'title': 'Напоминания',
+      'count': list.length,
+      'items': list
+          .take(30)
+          .map((r) => {
+                'id': r.id,
+                'text': r.text,
+                'scheduledAt': r.scheduledAt.toIso8601String(),
+                'minutesFromNow':
+                    r.scheduledAt.difference(now).inMinutes,
+                'done': r.done,
+              })
+          .toList(),
+    };
   }
 
   Future<void> _create() async {

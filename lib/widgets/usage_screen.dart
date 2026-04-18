@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_model.dart';
+import '../models/screen_snapshot.dart';
 import '../models/usage_event.dart';
 
 // ── Использование API (отдельный экран) ─────────────────────────────────────
@@ -14,7 +15,43 @@ class UsageScreen extends StatefulWidget {
   State<UsageScreen> createState() => _UsageScreenState();
 }
 
-class _UsageScreenState extends State<UsageScreen> {
+class _UsageScreenState extends State<UsageScreen>
+    implements ScreenSnapshotProvider {
+  @override
+  void initState() {
+    super.initState();
+    widget.model.pushScreen('usage', provider: this);
+  }
+
+  @override
+  void dispose() {
+    widget.model.popScreen();
+    super.dispose();
+  }
+
+  @override
+  String get screenName => 'usage';
+
+  @override
+  Map<String, dynamic> capture() {
+    final s = widget.model.settings;
+    return {
+      'kind': 'usage',
+      'title': 'Использование API',
+      'tokensIn': {
+        'anthropic': s.tokensInAnthropicTotal,
+        'openai': s.tokensInOpenaiTotal,
+        'deepseek': s.tokensInDeepseekTotal,
+      },
+      'tokensOut': {
+        'anthropic': s.tokensOutAnthropicTotal,
+        'openai': s.tokensOutOpenaiTotal,
+        'deepseek': s.tokensOutDeepseekTotal,
+      },
+      'recentCount': widget.model.recentUsage.length,
+    };
+  }
+
   Future<void> _resetTotals() async {
     final ok = await showDialog<bool>(
       context: context,
