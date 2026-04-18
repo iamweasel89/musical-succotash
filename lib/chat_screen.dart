@@ -10,6 +10,8 @@ import 'chat/helpers/bubble_time.dart';
 import 'chat/helpers/emoji.dart';
 import 'chat/widgets/action_row.dart';
 import 'chat/widgets/chat_bubble.dart';
+import 'chat/widgets/history_sheet.dart';
+import 'chat/widgets/markup_banner.dart';
 import 'models/app_model.dart';
 import 'models/attachment.dart';
 import 'models/edge.dart';
@@ -838,7 +840,7 @@ class _ChatScreenState extends State<ChatScreen>
           return Column(
             children: [
               if (_markupMode)
-                _MarkupBanner(
+                MarkupBanner(
                   count: widget.model.theses.length,
                   onExit: _exitMarkup,
                   onOpen: () => Navigator.of(context).push(MaterialPageRoute(
@@ -906,7 +908,7 @@ class _ChatScreenState extends State<ChatScreen>
   void _showHistory() {
     showModalBottomSheet(
       context: context,
-      builder: (_) => _HistorySheet(model: widget.model),
+      builder: (_) => HistorySheet(model: widget.model),
     );
   }
 
@@ -1078,110 +1080,3 @@ class _ChatScreenState extends State<ChatScreen>
 
 
 
-// ── History sheet ─────────────────────────────────────────────────────────
-
-class _HistorySheet extends StatelessWidget {
-  final AppModel model;
-  const _HistorySheet({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final stack = model.undoStack.reversed.toList();
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            width: 32, height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(children: [
-              Text('История изменений',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ]),
-          ),
-          if (stack.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('Нет записей', style: TextStyle(color: Colors.grey)),
-            )
-          else
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: stack.length,
-                itemBuilder: (_, i) => ListTile(
-                  leading: Icon(Icons.history,
-                      size: 18, color: Colors.grey[500]),
-                  title: Text(stack[i].description.isEmpty
-                      ? '—'
-                      : stack[i].description,
-                      style: const TextStyle(fontSize: 14)),
-                  dense: true,
-                ),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (model.canUndo)
-                  TextButton.icon(
-                    icon: const Icon(Icons.undo, size: 16),
-                    label: const Text('Отменить шаг'),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      model.undo();
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Markup banner ─────────────────────────────────────────────────────────────
-
-class _MarkupBanner extends StatelessWidget {
-  final int count;
-  final VoidCallback onExit;
-  final VoidCallback onOpen;
-  const _MarkupBanner({required this.count, required this.onExit, required this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.deepPurple[50],
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        children: [
-          const Icon(Icons.format_quote_outlined, size: 16, color: Colors.deepPurple),
-          const SizedBox(width: 8),
-          Text('Тезисы · $count', style: const TextStyle(fontSize: 13, color: Colors.deepPurple)),
-          const Spacer(),
-          GestureDetector(
-            onTap: onOpen,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Text('Открыть →', style: TextStyle(fontSize: 13, color: Colors.deepPurple, fontWeight: FontWeight.w600)),
-            ),
-          ),
-          GestureDetector(
-            onTap: onExit,
-            child: const Icon(Icons.close, size: 18, color: Colors.deepPurple),
-          ),
-        ],
-      ),
-    );
-  }
-}
