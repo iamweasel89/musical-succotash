@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import 'chat/helpers/bubble_time.dart';
 import 'chat/helpers/emoji.dart';
+import 'chat/helpers/hex_placement.dart';
 import 'chat/widgets/action_row.dart';
 import 'chat/widgets/chat_bubble.dart';
 import 'chat/widgets/history_sheet.dart';
@@ -112,7 +113,7 @@ class _ChatScreenState extends State<ChatScreen>
       dir = 0;
     } else {
       final lastNode = widget.model.nodeById(_chainPath.last)!;
-      final slot = _continuationSlot(lastNode);
+      final slot = continuationSlot(lastNode);
       pos = slot.pos;
       dir = slot.dir;
     }
@@ -275,36 +276,6 @@ class _ChatScreenState extends State<ChatScreen>
           .map((m) => m['content'] as String? ?? '')
           .join('\n\n');
 
-  // ── Placement helpers ─────────────────────────────────────────────────────
-
-  Set<HexPos> get _occupied {
-    final activeIds = widget.model.activeCanvas.nodeIds.toSet();
-    return widget.model.nodes
-        .where((n) => activeIds.contains(n.id))
-        .map((n) => n.position)
-        .toSet();
-  }
-
-  BranchSlot _continuationSlot(Node lastNode) {
-    final pos = chainNextPos(lastNode.position, lastNode.growthDir);
-    return BranchSlot(pos, lastNode.growthDir);
-  }
-
-  BranchSlot _branchSlot(Node branchPoint) {
-    final usedDirs = widget.model.activeCanvasEdges
-        .where((e) => e.fromId == branchPoint.id)
-        .map((e) => widget.model.nodeById(e.toId))
-        .whereType<Node>()
-        .map((n) => n.growthDir)
-        .toSet();
-    return nextBranchSlot(
-      from: branchPoint.position,
-      parentGrowthDir: branchPoint.growthDir,
-      usedChildDirs: usedDirs,
-      occupied: _occupied,
-    );
-  }
-
   // ── Attachments ───────────────────────────────────────────────────────────
 
   void _showAttachOptions() {
@@ -453,7 +424,7 @@ class _ChatScreenState extends State<ChatScreen>
 
     if (_chainPath.isEmpty) {
       final startPos = HexPos(0, 0);
-      final occ = _occupied;
+      final occ = occupiedPositions(widget.model);
       textSlot = BranchSlot(
         occ.contains(startPos) ? chainNextPos(startPos, 0) : startPos,
         0,
@@ -461,14 +432,16 @@ class _ChatScreenState extends State<ChatScreen>
     } else {
       final lastNode = widget.model.nodeById(_chainPath.last)!;
       final hasChildren = widget.model.activeCanvasEdges.any((e) => e.fromId == lastNode.id);
-      textSlot = hasChildren ? _branchSlot(lastNode) : _continuationSlot(lastNode);
+      textSlot = hasChildren
+          ? branchSlot(branchPoint: lastNode, model: widget.model)
+          : continuationSlot(lastNode);
     }
 
-    final occ = _occupied..add(textSlot.pos);
+    final occ = occupiedPositions(widget.model)..add(textSlot.pos);
     final apiPos = chainNextPos(textSlot.pos, textSlot.dir);
     // If api position is taken, find nearest free in same direction
     final finalApiPos = occ.contains(apiPos)
-        ? _fallbackPos(textSlot.pos, textSlot.dir, occ)
+        ? fallbackPos(textSlot.pos, textSlot.dir, occ)
         : apiPos;
 
     final textNode = Node(
@@ -506,14 +479,6 @@ class _ChatScreenState extends State<ChatScreen>
     _saveChain();
     _scrollToBottom();
     await _runNode(apiNode);
-  }
-
-  HexPos _fallbackPos(HexPos from, int dir, Set<HexPos> occ) {
-    for (int s = 2; s <= 10; s++) {
-      final p = hexStep(from, dir, s);
-      if (!occ.contains(p)) return p;
-    }
-    return hexStep(from, dir, 2);
   }
 
   Future<void> _runNode(Node apiNode) async {
@@ -673,7 +638,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _branchFromText(Node textNode, int chainIndex) {
     widget.model.snapshot('Ветвление');
-    final slot = _branchSlot(textNode);
+    final slot = branchSlot(branchPoint: textNode, model: widget.model);
     final apiNode = Node(
       type: NodeType.api,
       position: slot.pos,
