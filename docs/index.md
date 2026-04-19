@@ -25,6 +25,10 @@
 
 - [docs/ops/tunnel.md](ops/tunnel.md) — Tailscale Funnel с windows-3tm8vsu к отладочному API телефона
 
+## Архитектура
+
+- [docs/architecture-draft.md](architecture-draft.md) — черновик целевой архитектуры v0.1 (2026-04-17): 9 болевых точек, 4 подхода, рекомендация-гибрид, миграционная стратегия через пилот Reminders. Связан с Р8 в бэклоге.
+
 ## Кейсы — история решений
 
 [cases/](../cases/) — `NNN-slug.md`, почему именно так:
