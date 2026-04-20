@@ -58,6 +58,7 @@ class AppUpdater {
   static UpdateInfo? updateInfo;
   static File? downloadedFile;
   static InstallReadiness? installReadiness;
+  static int currentBuild = 0;
   static int _installedBuild = 0;
 
   static int? _downloadId;
@@ -146,6 +147,7 @@ class AppUpdater {
       final packageBuild = int.tryParse(pkgInfo.buildNumber) ?? 0;
       final currentBuild =
           packageBuild > _installedBuild ? packageBuild : _installedBuild;
+      AppUpdater.currentBuild = currentBuild;
       _log('check: currentBuild=$currentBuild packageBuild=$packageBuild');
 
       // Query GitHub API for recent releases and find the highest sub-build-N

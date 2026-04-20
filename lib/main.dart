@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'services/debug_server.dart';
 import 'services/llm_client.dart';
@@ -996,10 +997,20 @@ class UpdaterSheet extends StatefulWidget {
 }
 
 class _UpdaterSheetState extends State<UpdaterSheet> {
+  String _packageBuild = '?';
+
   @override
   void initState() {
     super.initState();
     AppUpdater.addListener(_onTick);
+    _loadPackage();
+  }
+
+  Future<void> _loadPackage() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) setState(() => _packageBuild = info.buildNumber);
+    } catch (_) {}
   }
 
   @override
@@ -1016,6 +1027,7 @@ class _UpdaterSheetState extends State<UpdaterSheet> {
   Widget build(BuildContext context) {
     final state = AppUpdater.state;
     final msg = AppUpdater.message;
+    final latest = AppUpdater.updateInfo?.latestBuild;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1024,10 +1036,35 @@ class _UpdaterSheetState extends State<UpdaterSheet> {
         children: [
           Text('Обновление', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          Text('Статус: ${state.name}'),
+          Row(
+            children: [
+              Expanded(
+                child: _buildInfoBox(
+                  label: 'Текущий',
+                  value: 'build-$_packageBuild',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildInfoBox(
+                  label: 'Доступен',
+                  value: latest != null
+                      ? 'build-$latest'
+                      : (state == UpdState.upToDate
+                          ? 'нет нового'
+                          : '—'),
+                  highlighted: latest != null &&
+                      latest > (int.tryParse(_packageBuild) ?? 0),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('Статус: ${state.name}',
+              style: Theme.of(context).textTheme.bodySmall),
           if (msg.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(msg),
+            const SizedBox(height: 4),
+            Text(msg, style: Theme.of(context).textTheme.bodySmall),
           ],
           if (state == UpdState.downloading) ...[
             const SizedBox(height: 12),
@@ -1056,6 +1093,36 @@ class _UpdaterSheetState extends State<UpdaterSheet> {
                 ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBox({
+    required String label,
+    required String value,
+    bool highlighted = false,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              )),
         ],
       ),
     );
