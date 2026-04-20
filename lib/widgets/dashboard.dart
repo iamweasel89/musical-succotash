@@ -8,40 +8,24 @@ class Dashboard extends StatelessWidget {
   final List<File> atoms;
   final List<File> moves;
   final Map<String, String> atomText;
-  final Map<String, String> moveText;
   final Map<String, int> depth;
   final Map<String, int> manualDepth;
-  final Map<String, List<String>> children;
-  final Future<void> Function(File) onOpenAtom;
-  final Future<void> Function(File) onOpenMove;
-  final VoidCallback onOpenAllAtoms;
-  final VoidCallback onOpenAllMoves;
-  final VoidCallback? onOpenChain;
-  final VoidCallback onOpenAllChains;
   final int chainCount;
+  final Future<void> Function(File) onOpenAtom;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
-  final Future<void> Function() onRefresh;
 
   const Dashboard({
     super.key,
     required this.atoms,
     required this.moves,
     required this.atomText,
-    required this.moveText,
     required this.depth,
     required this.manualDepth,
-    required this.children,
-    required this.onOpenAtom,
-    required this.onOpenMove,
-    required this.onOpenAllAtoms,
-    required this.onOpenAllMoves,
-    required this.onOpenAllChains,
     required this.chainCount,
-    this.onOpenChain,
+    required this.onOpenAtom,
     required this.searchQuery,
     required this.onSearchChanged,
-    required this.onRefresh,
   });
 
   String _idOf(File f) => f.path.split('/').last.replaceAll('.md', '');
@@ -54,9 +38,7 @@ class Dashboard extends StatelessWidget {
         .split('\n')
         .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
     final stripped = line.replaceAll(RegExp(r'\*+'), '').trim();
-    return stripped.length > 80
-        ? '${stripped.substring(0, 80)}…'
-        : stripped;
+    return stripped.length > 80 ? '${stripped.substring(0, 80)}…' : stripped;
   }
 
   String _typeOf(String? text) {
@@ -96,48 +78,6 @@ class Dashboard extends StatelessWidget {
     return _ChainStats(pure: pure, mixed: mixed, solo: solo);
   }
 
-  List<File> _lastAtoms(int n) {
-    // atoms are already sorted newest-first by listAtoms
-    return atoms.take(n).toList();
-  }
-
-  File? _deepestMove() {
-    if (moves.isEmpty) return null;
-    File? best;
-    var bestDepth = -1;
-    for (final f in moves) {
-      final d = depth[_idOf(f)] ?? 0;
-      if (d > bestDepth) {
-        bestDepth = d;
-        best = f;
-      }
-    }
-    return best;
-  }
-
-  List<File> _chainFrom(File tip) {
-    final chain = <File>[tip];
-    var current = tip;
-    while (true) {
-      final id = _idOf(current);
-      final text = moveText[current.path];
-      if (text == null) break;
-      final parents = parseIdList(
-          parseFrontmatter(text).meta['parent_move_ids']);
-      if (parents.isEmpty) break;
-      final parentId = parents.first;
-      final parentFile = moves.firstWhere(
-        (m) => _idOf(m) == parentId,
-        orElse: () => current,
-      );
-      if (_idOf(parentFile) == id) break;
-      chain.insert(0, parentFile);
-      current = parentFile;
-      if (chain.length > 50) break;
-    }
-    return chain;
-  }
-
   List<File> _filteredAtoms() {
     final q = searchQuery.toLowerCase();
     if (q.startsWith('#')) {
@@ -159,57 +99,61 @@ class Dashboard extends StatelessWidget {
     final theme = Theme.of(context);
     final stats = _chainStats();
     final isSearching = searchQuery.isNotEmpty;
-    final deepest = _deepestMove();
-    final chain = deepest == null ? <File>[] : _chainFrom(deepest);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _searchField(theme),
-              const SizedBox(height: 16),
-              _statsHeader(theme, stats),
-            ],
-          ),
+    if (isSearching) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _searchField(theme),
+            const SizedBox(height: 16),
+            _sectionTitle(theme, 'Найденное (${_filteredAtoms().length})'),
+            const SizedBox(height: 8),
+            Expanded(child: _searchResults(theme)),
+          ],
         ),
-        if (isSearching) ...[
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _searchField(theme),
+          const SizedBox(height: 16),
+          _statsRow(theme, stats),
+        ],
+      ),
+    );
+  }
+
+  Widget _statsRow(ThemeData theme, _ChainStats stats) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _bigStatCard(theme, value: '${atoms.length}', label: 'атомов')),
+          const SizedBox(width: 8),
+          Expanded(child: _bigStatCard(theme, value: '${moves.length}', label: 'ходов')),
+          const SizedBox(width: 8),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _sectionTitle(theme, 'Найденное (${_filteredAtoms().length})'),
-                  const SizedBox(height: 8),
-                  Expanded(child: _searchResults(theme)),
-                ],
-              ),
-            ),
-          ),
-        ] else ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (chain.length >= 2) ...[
-                  _chainHeader(theme, chain, deepest!),
-                  const SizedBox(height: 8),
-                  _chainRow(theme, chain),
-                  const SizedBox(height: 16),
-                ],
-                _allButtons(theme),
+                _smallStat(theme, '$chainCount', 'цепочек'),
+                const SizedBox(height: 4),
+                _smallStat(theme, '${stats.pure}', 'чистых'),
+                const SizedBox(height: 4),
+                _smallStat(theme, '${stats.mixed}', 'смешан.'),
               ],
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 
@@ -218,35 +162,13 @@ class Dashboard extends StatelessWidget {
     if (results.isEmpty) {
       return Center(
         child: Text('Ничего не найдено',
-            style:
-                theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline)),
       );
     }
     return ListView.builder(
       itemCount: results.length,
       itemBuilder: (_, i) => _atomCard(theme, results[i]),
-    );
-  }
-
-  Widget _chainHeader(ThemeData theme, List<File> chain, File deepest) {
-    return Row(
-      children: [
-        Expanded(
-          child: _sectionTitle(theme, 'Последняя цепочка',
-              suffix:
-                  '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest)] ?? 0}'),
-        ),
-        if (onOpenChain != null)
-          GestureDetector(
-            onTap: onOpenChain,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text('Открыть →',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: theme.colorScheme.primary)),
-            ),
-          ),
-      ],
     );
   }
 
@@ -267,42 +189,6 @@ class Dashboard extends StatelessWidget {
     );
   }
 
-  Widget _statsHeader(ThemeData theme, _ChainStats stats) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _bigStatCard(
-            theme,
-            value: atoms.length.toString(),
-            label: 'атомов',
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _bigStatCard(
-            theme,
-            value: moves.length.toString(),
-            label: 'ходов',
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _smallStat(theme, '$chainCount', 'цепочек'),
-              const SizedBox(height: 4),
-              _smallStat(theme, '${stats.pure}', 'чистых'),
-              const SizedBox(height: 4),
-              _smallStat(theme, '${stats.mixed}', 'смешан.'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _bigStatCard(ThemeData theme,
       {required String value, required String label}) {
     return Container(
@@ -312,16 +198,15 @@ class Dashboard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(value,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              )),
+              style: theme.textTheme.headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
           Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              )),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
         ],
       ),
     );
@@ -342,9 +227,8 @@ class Dashboard extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(width: 4),
           Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              )),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
         ],
       ),
     );
@@ -362,9 +246,8 @@ class Dashboard extends StatelessWidget {
         if (suffix != null) ...[
           const Spacer(),
           Text(suffix,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.outline,
-              )),
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
         ],
       ],
     );
@@ -380,15 +263,14 @@ class Dashboard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       color: theme.colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => onOpenAtom(f),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -408,9 +290,8 @@ class Dashboard extends StatelessWidget {
                     ),
                   const Spacer(),
                   Text(time,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      )),
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.outline)),
                 ],
               ),
               if (preview.isNotEmpty) ...[
@@ -423,9 +304,8 @@ class Dashboard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text('(пусто)',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      )),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.outline)),
                 ),
               if (tags.isNotEmpty) ...[
                 const SizedBox(height: 6),
@@ -471,112 +351,11 @@ class Dashboard extends StatelessWidget {
         return theme.colorScheme.surfaceContainerHighest;
     }
   }
-
-  Widget _chainRow(ThemeData theme, List<File> chain) {
-    return SizedBox(
-      height: 76,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: chain.length,
-        separatorBuilder: (_, __) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Icon(Icons.arrow_forward,
-              size: 16, color: theme.colorScheme.outline),
-        ),
-        itemBuilder: (_, i) {
-          final f = chain[i];
-          final text = moveText[f.path];
-          final preview = _firstLine(text);
-          final id = _idOf(f);
-          final d = depth[id] ?? 0;
-          final md = manualDepth[id] ?? 0;
-          return InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => onOpenMove(f),
-            child: Container(
-              width: 140,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: md == d && d > 0
-                      ? Colors.green.withOpacity(0.5)
-                      : theme.colorScheme.outlineVariant,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(preview,
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  Row(
-                    children: [
-                      Text('⛓$d',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          )),
-                      const SizedBox(width: 6),
-                      Text('✓$md',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: md == d && d > 0
-                                ? Colors.green
-                                : theme.colorScheme.outline,
-                          )),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _allButtons(ThemeData theme) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onOpenAllAtoms,
-                icon: const Icon(Icons.list_alt, size: 18),
-                label: Text('Атомы (${atoms.length})'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onOpenAllMoves,
-                icon: const Icon(Icons.account_tree_outlined, size: 18),
-                label: Text('Ходы (${moves.length})'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onOpenAllChains,
-            icon: const Icon(Icons.linear_scale, size: 18),
-            label: Text('Цепочки ($chainCount)'),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _ChainStats {
   final int pure;
   final int mixed;
   final int solo;
-  const _ChainStats(
-      {required this.pure, required this.mixed, required this.solo});
+  const _ChainStats({required this.pure, required this.mixed, required this.solo});
 }

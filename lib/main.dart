@@ -505,29 +505,37 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Dashboard(
+                if (_search.isNotEmpty)
+                  Expanded(
+                    child: Dashboard(
+                      atoms: _atoms,
+                      moves: _moves,
+                      atomText: _atomText,
+                      depth: _depth,
+                      manualDepth: _manualDepth,
+                      chainCount: _chains.length,
+                      onOpenAtom: _openAtom,
+                      searchQuery: _search,
+                      onSearchChanged: (v) => setState(() => _search = v.trim()),
+                    ),
+                  )
+                else ...[
+                  Dashboard(
                     atoms: _atoms,
                     moves: _moves,
                     atomText: _atomText,
-                    moveText: _moveText,
                     depth: _depth,
                     manualDepth: _manualDepth,
-                    children: _children,
-                    onOpenAtom: _openAtom,
-                    onOpenMove: _openMove,
-                    onOpenAllAtoms: _openAllAtoms,
-                    onOpenAllMoves: _openAllMoves,
-                    onOpenChain: _chains.isEmpty ? null : () => _openChain(_chains.first),
-                    onOpenAllChains: _openAllChains,
                     chainCount: _chains.length,
+                    onOpenAtom: _openAtom,
                     searchQuery: _search,
-                    onSearchChanged: (v) =>
-                        setState(() => _search = v.trim()),
-                    onRefresh: _refresh,
+                    onSearchChanged: (v) => setState(() => _search = v.trim()),
                   ),
-                ),
+                  if (_chains.isNotEmpty) _buildChainStrip(context),
+                  _buildNavButtons(context),
+                ],
                 if (_lastStatus != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -610,6 +618,161 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  String _movePreview(File f) {
+    final text = _moveText[f.path] ?? '';
+    final meta = parseFrontmatter(text).meta;
+    final ctxRefs = parseIdList(meta['context_refs']);
+    for (final ref in ctxRefs) {
+      final t = _atomTextById[ref];
+      if (t == null) continue;
+      final p = parseFrontmatter(t);
+      if (p.meta['type'] == 'prompt') {
+        final line = p.body
+            .split('\n')
+            .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+        return line.length > 60 ? '${line.substring(0, 60)}…' : line;
+      }
+    }
+    return '';
+  }
+
+  Widget _buildChainStrip(BuildContext context) {
+    final theme = Theme.of(context);
+    final chain = _chains.first;
+    final tipId = _idOf(chain.last);
+    final md = _manualDepth[tipId] ?? 0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'ПОСЛЕДНЯЯ ЦЕПОЧКА  ⛓${chain.length} · ✓$md',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _openChain(chain),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text('Открыть →',
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.primary)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 76,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: chain.length,
+              separatorBuilder: (_, __) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.arrow_forward,
+                    size: 16, color: theme.colorScheme.outline),
+              ),
+              itemBuilder: (_, i) {
+                final f = chain[i];
+                final id = _idOf(f);
+                final d = _depth[id] ?? 0;
+                final m = _manualDepth[id] ?? 0;
+                final preview = _movePreview(f);
+                return InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _openMove(f),
+                  child: Container(
+                    width: 140,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: m == d && d > 0
+                            ? Colors.green.withOpacity(0.5)
+                            : theme.colorScheme.outlineVariant,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(preview,
+                            style: theme.textTheme.bodySmall,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                        Row(children: [
+                          Text('⛓$d',
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: theme.colorScheme.outline)),
+                          const SizedBox(width: 6),
+                          Text('✓$m',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: m == d && d > 0
+                                    ? Colors.green
+                                    : theme.colorScheme.outline,
+                              )),
+                        ]),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavButtons(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openAllAtoms,
+                  icon: const Icon(Icons.list_alt, size: 18),
+                  label: Text('Атомы (${_atoms.length})'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openAllMoves,
+                  icon: const Icon(Icons.account_tree_outlined, size: 18),
+                  label: Text('Ходы (${_moves.length})'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _openAllChains,
+            icon: const Icon(Icons.linear_scale, size: 18),
+            label: Text('Цепочки (${_chains.length})'),
+          ),
+        ],
+      ),
     );
   }
 
