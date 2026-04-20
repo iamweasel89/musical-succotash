@@ -44,12 +44,18 @@ List<String> parseIdList(String? value) {
 class AtomView extends StatefulWidget {
   final String filename;
   final String rawText;
+  final int? depth;
+  final int? manualDepth;
+  final List<String> childMoveIds;
   final Future<void> Function(String id)? onOpenAtom;
   final Future<void> Function(String id)? onOpenMove;
   const AtomView({
     super.key,
     required this.filename,
     required this.rawText,
+    this.depth,
+    this.manualDepth,
+    this.childMoveIds = const [],
     this.onOpenAtom,
     this.onOpenMove,
   });
@@ -96,6 +102,14 @@ class _AtomViewState extends State<AtomView> {
         onTap: widget.onOpenMove,
       ));
     }
+    if (widget.childMoveIds.isNotEmpty) {
+      linkSections.add(_linkRow(
+        context,
+        label: 'Дочерние ходы',
+        ids: widget.childMoveIds,
+        onTap: widget.onOpenMove,
+      ));
+    }
     if (contextRefs.isNotEmpty) {
       linkSections.add(_linkRow(
         context,
@@ -124,13 +138,19 @@ class _AtomViewState extends State<AtomView> {
             style: Theme.of(context).textTheme.labelSmall,
           ),
         ),
-        if (chips.isNotEmpty)
+        if (chips.isNotEmpty || widget.depth != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: chips,
+              children: [
+                if (widget.depth != null)
+                  _chip('⛓ ${widget.depth}'),
+                if (widget.manualDepth != null)
+                  _chip('✓ ${widget.manualDepth}'),
+                ...chips,
+              ],
             ),
           ),
         if (linkSections.isNotEmpty) ...[

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -43,6 +44,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+enum MoveSort { byTime, byDepth, byManualDepth }
+
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   final _vault = Vault();
@@ -55,6 +58,10 @@ class _HomeScreenState extends State<HomeScreen>
   List<File> _moves = [];
   final Map<String, String> _atomText = {};
   final Map<String, String> _moveText = {};
+  final Map<String, int> _depth = {};
+  final Map<String, int> _manualDepth = {};
+  final Map<String, List<String>> _children = {};
+  MoveSort _moveSort = MoveSort.byTime;
   String _search = '';
   bool _loading = true;
   bool _sending = false;
@@ -90,8 +97,22 @@ class _HomeScreenState extends State<HomeScreen>
     }).toList();
   }
 
+  String _idOf(File f) => f.path.split('/').last.replaceAll('.md', '');
+
   List<File> get _visibleAtoms => _filter(_atoms, _atomText);
-  List<File> get _visibleMoves => _filter(_moves, _moveText);
+
+  List<File> get _visibleMoves {
+    final filtered = _filter(_moves, _moveText);
+    if (_moveSort == MoveSort.byTime) return filtered;
+    final sorted = [...filtered];
+    final map = _moveSort == MoveSort.byDepth ? _depth : _manualDepth;
+    sorted.sort((a, b) {
+      final da = map[_idOf(a)] ?? 0;
+      final db = map[_idOf(b)] ?? 0;
+      return db.compareTo(da);
+    });
+    return sorted;
+  }
 
   void _onUpdater() {
     if (mounted) setState(() {});
@@ -160,6 +181,7 @@ class _HomeScreenState extends State<HomeScreen>
         _moveText
           ..clear()
           ..addAll(moveTexts);
+        _computeMoveMetrics();
         _loading = false;
       });
       if (staged.isNotEmpty && _promptCtl.text.trim().isEmpty) {
@@ -168,6 +190,64 @@ class _HomeScreenState extends State<HomeScreen>
         if (mounted) setState(() {});
       }
     }
+  }
+
+  void _computeMoveMetrics() {
+    _depth.clear();
+    _manualDepth.clear();
+    _children.clear();
+
+    final parents = <String, List<String>>{};
+    final gates = <String, String>{};
+    for (final f in _moves) {
+      final text = _moveText[f.path];
+      if (text == null) continue;
+      final id = f.path.split('/').last.replaceAll('.md', '');
+      final parsed = parseFrontmatter(text);
+      parents[id] = parseIdList(parsed.meta['parent_move_ids']);
+      gates[id] = parsed.meta['gate'] ?? 'auto';
+    }
+
+    int depthOf(String id) {
+      if (_depth.containsKey(id)) return _depth[id]!;
+      final p = parents[id] ?? const <String>[];
+      var d = 0;
+      for (final parent in p) {
+        if (parents.containsKey(parent)) {
+          d = math.max(d, 1 + depthOf(parent));
+        }
+      }
+      _depth[id] = d;
+      return d;
+    }
+
+    int manualDepthOf(String id) {
+      if (_manualDepth.containsKey(id)) return _manualDepth[id]!;
+      if (gates[id] != 'manual') {
+        _manualDepth[id] = 0;
+        return 0;
+      }
+      final p = parents[id] ?? const <String>[];
+      var d = 1;
+      for (final parent in p) {
+        if (parents.containsKey(parent) && gates[parent] == 'manual') {
+          d = math.max(d, 1 + manualDepthOf(parent));
+        }
+      }
+      _manualDepth[id] = d;
+      return d;
+    }
+
+    for (final id in parents.keys) {
+      depthOf(id);
+      manualDepthOf(id);
+    }
+
+    parents.forEach((child, ps) {
+      for (final p in ps) {
+        (_children[p] ??= []).add(child);
+      }
+    });
   }
 
   Future<void> _send() async {
@@ -427,12 +507,54 @@ class _HomeScreenState extends State<HomeScreen>
                         visible: _visibleAtoms,
                         emptyLabel: 'Атомов нет',
                         onTapFile: _openAtom,
+                        withDepth: false,
                       ),
-                      _buildList(
-                        all: _moves,
-                        visible: _visibleMoves,
-                        emptyLabel: 'Ходов нет',
-                        onTapFile: _openMove,
+                      Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            child: Row(
+                              children: [
+                                Text('Сортировка:',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall),
+                                const SizedBox(width: 8),
+                                DropdownButton<MoveSort>(
+                                  value: _moveSort,
+                                  isDense: true,
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: MoveSort.byTime,
+                                        child: Text('по времени')),
+                                    DropdownMenuItem(
+                                        value: MoveSort.byDepth,
+                                        child: Text('по глубине ⛓')),
+                                    DropdownMenuItem(
+                                        value: MoveSort.byManualDepth,
+                                        child:
+                                            Text('по чистой глубине ✓')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v != null) {
+                                      setState(() => _moveSort = v);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildList(
+                              all: _moves,
+                              visible: _visibleMoves,
+                              emptyLabel: 'Ходов нет',
+                              onTapFile: _openMove,
+                              withDepth: true,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -526,6 +648,7 @@ class _HomeScreenState extends State<HomeScreen>
     required List<File> visible,
     required String emptyLabel,
     required Future<void> Function(File) onTapFile,
+    bool withDepth = false,
   }) {
     return RefreshIndicator(
       onRefresh: _refresh,
@@ -560,13 +683,43 @@ class _HomeScreenState extends State<HomeScreen>
           itemBuilder: (_, i) {
             final f = visible[i];
             final name = f.path.split('/').last;
+            Widget? trailing;
+            if (withDepth) {
+              final id = _idOf(f);
+              final d = _depth[id] ?? 0;
+              final md = _manualDepth[id] ?? 0;
+              trailing = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _depthChip('⛓ $d',
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh),
+                  const SizedBox(width: 4),
+                  _depthChip('✓ $md',
+                      color: md == d
+                          ? Colors.green.withOpacity(0.25)
+                          : Colors.orange.withOpacity(0.20)),
+                ],
+              );
+            }
             return ListTile(
               title: Text(name),
+              trailing: trailing,
               onTap: () => onTapFile(f),
             );
           },
         );
       }),
+    );
+  }
+
+  Widget _depthChip(String text, {required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 11)),
     );
   }
 
@@ -597,6 +750,7 @@ class _HomeScreenState extends State<HomeScreen>
     final text = await f.readAsString();
     if (!mounted) return;
     final filename = f.path.split('/').last;
+    final id = _idOf(f);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -608,6 +762,9 @@ class _HomeScreenState extends State<HomeScreen>
           child: AtomView(
             filename: filename,
             rawText: text,
+            depth: _depth[id],
+            manualDepth: _manualDepth[id],
+            childMoveIds: _children[id] ?? const [],
             onOpenAtom: _openAtomById,
             onOpenMove: _openMoveById,
           ),
