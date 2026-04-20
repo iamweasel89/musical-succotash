@@ -162,13 +162,13 @@ class Dashboard extends StatelessWidget {
     final deepest = _deepestMove();
     final chain = deepest == null ? <File>[] : _chainFrom(deepest);
 
-    return LayoutBuilder(
-      builder: (context, constraints) => RefreshIndicator(
-        onRefresh: onRefresh,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            height: constraints.maxHeight,
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(
@@ -197,7 +197,7 @@ class Dashboard extends StatelessWidget {
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
