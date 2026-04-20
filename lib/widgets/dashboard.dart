@@ -162,31 +162,54 @@ class Dashboard extends StatelessWidget {
     final deepest = _deepestMove();
     final chain = deepest == null ? <File>[] : _chainFrom(deepest);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _searchField(theme),
-          const SizedBox(height: 16),
-          _statsHeader(theme, stats),
-          if (isSearching) ...[
-            const SizedBox(height: 16),
-            _sectionTitle(theme, 'Найденное (${_filteredAtoms().length})'),
-            const SizedBox(height: 8),
-            Expanded(child: _searchResults(theme)),
-          ] else ...[
-            const SizedBox(height: 16),
-            if (chain.length >= 2) ...[
-              _chainHeader(theme, chain, deepest!),
-              const SizedBox(height: 8),
-              _chainRow(theme, chain),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _searchField(theme),
               const SizedBox(height: 16),
+              _statsHeader(theme, stats),
             ],
-            _allButtons(theme),
-          ],
+          ),
+        ),
+        if (isSearching) ...[
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _sectionTitle(theme, 'Найденное (${_filteredAtoms().length})'),
+                  const SizedBox(height: 8),
+                  Expanded(child: _searchResults(theme)),
+                ],
+              ),
+            ),
+          ),
+        ] else ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (chain.length >= 2) ...[
+                  _chainHeader(theme, chain, deepest!),
+                  const SizedBox(height: 8),
+                  _chainRow(theme, chain),
+                  const SizedBox(height: 16),
+                ],
+                _allButtons(theme),
+              ],
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 
