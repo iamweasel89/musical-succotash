@@ -136,6 +136,16 @@ class Vault {
     files.sort((a, b) => b.path.compareTo(a.path));
     return files;
   }
+
+  Future<List<File>> listMoves() async {
+    final files = await _moves!
+        .list()
+        .where((e) => e is File && e.path.endsWith('.md'))
+        .cast<File>()
+        .toList();
+    files.sort((a, b) => b.path.compareTo(a.path));
+    return files;
+  }
 }
 
 class MoveResult {

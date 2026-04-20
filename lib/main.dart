@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'services/debug_server.dart';
 import 'services/settings.dart';
 import 'services/updater.dart';
 import 'services/vault.dart';
@@ -41,6 +42,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _vault = Vault();
   final _promptCtl = TextEditingController();
+  DebugServer? _debug;
   List<File> _atoms = [];
   bool _loading = true;
   bool _sending = false;
@@ -68,6 +70,22 @@ class _HomeScreenState extends State<HomeScreen> {
     await _vault.init();
     await _seedIfEmpty();
     await _refresh();
+    if (await Settings.getDebugEnabled()) {
+      await _startDebug();
+    }
+  }
+
+  Future<void> _startDebug() async {
+    _debug ??= DebugServer(_vault);
+    try {
+      await _debug!.start();
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _stopDebug() async {
+    await _debug?.stop();
+    if (mounted) setState(() {});
   }
 
   Future<void> _seedIfEmpty() async {
@@ -140,7 +158,16 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const SettingsScreen(),
+                builder: (_) => SettingsScreen(
+                  onDebugToggled: (enabled) async {
+                    if (enabled) {
+                      await _startDebug();
+                    } else {
+                      await _stopDebug();
+                    }
+                  },
+                  debugRunning: _debug?.isRunning ?? false,
+                ),
               ),
             ),
           ),
@@ -251,7 +278,13 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final Future<void> Function(bool enabled)? onDebugToggled;
+  final bool debugRunning;
+  const SettingsScreen({
+    super.key,
+    this.onDebugToggled,
+    this.debugRunning = false,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -261,7 +294,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _apiCtl = TextEditingController();
   final _modelCtl = TextEditingController();
   final _maxCtl = TextEditingController();
+  final _portCtl = TextEditingController();
   bool _obscure = true;
+  bool _debugEnabled = false;
+  String _debugToken = '';
+  List<String> _ips = [];
 
   @override
   void initState() {
@@ -273,7 +310,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiCtl.text = await Settings.getApiKey();
     _modelCtl.text = await Settings.getModel();
     _maxCtl.text = (await Settings.getMaxTokens()).toString();
+    _portCtl.text = (await Settings.getDebugPort()).toString();
+    _debugEnabled = await Settings.getDebugEnabled();
+    _debugToken = await Settings.getDebugToken();
+    _ips = await _listIps();
     if (mounted) setState(() {});
+  }
+
+  Future<List<String>> _listIps() async {
+    final out = <String>[];
+    try {
+      final ifs = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final i in ifs) {
+        for (final a in i.addresses) {
+          out.add('${i.name} ${a.address}');
+        }
+      }
+    } catch (_) {}
+    return out;
   }
 
   @override
@@ -281,6 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiCtl.dispose();
     _modelCtl.dispose();
     _maxCtl.dispose();
+    _portCtl.dispose();
     super.dispose();
   }
 
@@ -289,6 +347,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await Settings.setModel(_modelCtl.text.trim());
     final max = int.tryParse(_maxCtl.text.trim()) ?? Settings.defaultMaxTokens;
     await Settings.setMaxTokens(max);
+    final port = int.tryParse(_portCtl.text.trim()) ??
+        Settings.defaultDebugPort;
+    await Settings.setDebugPort(port);
+    await Settings.setDebugEnabled(_debugEnabled);
+    await widget.onDebugToggled?.call(_debugEnabled);
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -296,48 +359,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Настройки')),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _apiCtl,
-              obscureText: _obscure,
-              decoration: InputDecoration(
-                labelText: 'Anthropic API key',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                      _obscure ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                ),
+        children: [
+          TextField(
+            controller: _apiCtl,
+            obscureText: _obscure,
+            decoration: InputDecoration(
+              labelText: 'Anthropic API key',
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off),
+                onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _modelCtl,
-              decoration: const InputDecoration(
-                labelText: 'Model',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _modelCtl,
+            decoration: const InputDecoration(
+              labelText: 'Model',
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _maxCtl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Max tokens',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _maxCtl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Max tokens',
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _save,
-              child: const Text('Сохранить'),
+          ),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text('Debug HTTP-сервер',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Включён'),
+            value: _debugEnabled,
+            onChanged: (v) => setState(() => _debugEnabled = v),
+          ),
+          TextField(
+            controller: _portCtl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Порт',
+              border: OutlineInputBorder(),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('X-Debug-Token'),
+            subtitle: SelectableText(_debugToken),
+            trailing: IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Новый токен',
+              onPressed: () async {
+                final r = DateTime.now().microsecondsSinceEpoch;
+                final t = 'tok_${r.toRadixString(36)}';
+                await Settings.setDebugToken(t);
+                setState(() => _debugToken = t);
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Адреса устройства:',
+              style: Theme.of(context).textTheme.bodySmall),
+          for (final ip in _ips) SelectableText(ip),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _save,
+            child: const Text('Сохранить'),
+          ),
+        ],
       ),
     );
   }
