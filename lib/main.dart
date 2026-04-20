@@ -161,6 +161,11 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Substrate'),
         actions: [
           IconButton(
+            tooltip: 'Перечитать волт',
+            icon: const Icon(Icons.refresh),
+            onPressed: _refresh,
+          ),
+          IconButton(
             tooltip: 'Настройки',
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.of(context).push(
@@ -191,21 +196,33 @@ class _HomeScreenState extends State<HomeScreen> {
           : Column(
               children: [
                 Expanded(
-                  child: _atoms.isEmpty
-                      ? const Center(child: Text('Волт пуст'))
-                      : ListView.separated(
-                          itemCount: _atoms.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 1),
-                          itemBuilder: (_, i) {
-                            final f = _atoms[i];
-                            final name = f.path.split('/').last;
-                            return ListTile(
-                              title: Text(name),
-                              onTap: () => _openAtom(f),
-                            );
-                          },
-                        ),
+                  child: RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: _atoms.isEmpty
+                        ? ListView(
+                            physics:
+                                const AlwaysScrollableScrollPhysics(),
+                            children: const [
+                              SizedBox(height: 200),
+                              Center(child: Text('Волт пуст')),
+                            ],
+                          )
+                        : ListView.separated(
+                            physics:
+                                const AlwaysScrollableScrollPhysics(),
+                            itemCount: _atoms.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (_, i) {
+                              final f = _atoms[i];
+                              final name = f.path.split('/').last;
+                              return ListTile(
+                                title: Text(name),
+                                onTap: () => _openAtom(f),
+                              );
+                            },
+                          ),
+                  ),
                 ),
                 if (_lastStatus != null)
                   Padding(
