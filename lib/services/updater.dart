@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'settings.dart';
+
 // ── Update state ───────────────────────────────────────────────────────────
 enum UpdState { idle, checking, upToDate, available, downloading, ready, error }
 
@@ -40,7 +42,7 @@ class AppUpdater {
   // via GitHub API to filter by that prefix — `releases/latest` is owned by
   // the other branch's tag scheme and cannot be reused here.
   static const _apiReleases =
-      'https://api.github.com/repos/iamweasel89/musical-succotash/releases?per_page=20';
+      'https://api.github.com/repos/iamweasel89/musical-succotash/releases?per_page=100';
   static const _repoBase =
       'https://github.com/iamweasel89/musical-succotash';
   static const _tagPrefix = 'sub-build-';
@@ -151,9 +153,13 @@ class AppUpdater {
       _log('check: currentBuild=$currentBuild packageBuild=$packageBuild');
 
       // Query GitHub API for recent releases and find the highest sub-build-N
-      // tag. Rate limit is 60/hour anonymous; for a single user this is fine.
+      // tag. Authenticated requests get 5000/hour vs 60/hour anonymous.
+      final githubToken = await Settings.getGithubToken();
+      final headers = githubToken.isNotEmpty
+          ? {'Authorization': 'token $githubToken'}
+          : const <String, String>{};
       final resp = await http
-          .get(Uri.parse(_apiReleases))
+          .get(Uri.parse(_apiReleases), headers: headers)
           .timeout(const Duration(seconds: 10));
       _log('check: api status=${resp.statusCode}');
       if (resp.statusCode != 200) {

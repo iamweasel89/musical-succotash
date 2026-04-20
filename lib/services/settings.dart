@@ -84,6 +84,29 @@ class Settings {
     await _prefs!.setInt(_kDebugPort, v);
   }
 
+  static const _kAutoTagEnabled = 'auto_tag_enabled';
+  static const _kGithubToken = 'github_token';
+
+  static Future<bool> getAutoTagEnabled() async {
+    await _ensure();
+    return _prefs!.getBool(_kAutoTagEnabled) ?? true;
+  }
+
+  static Future<void> setAutoTagEnabled(bool v) async {
+    await _ensure();
+    await _prefs!.setBool(_kAutoTagEnabled, v);
+  }
+
+  static Future<String> getGithubToken() async {
+    await _ensure();
+    return _prefs!.getString(_kGithubToken) ?? '';
+  }
+
+  static Future<void> setGithubToken(String v) async {
+    await _ensure();
+    await _prefs!.setString(_kGithubToken, v);
+  }
+
   static const _kStagedPrompt = 'staged_prompt';
 
   static Future<String> getStagedPrompt() async {

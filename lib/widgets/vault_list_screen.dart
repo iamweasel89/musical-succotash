@@ -47,11 +47,22 @@ class _VaultListScreenState extends State<VaultListScreen> {
     var list = widget.files;
     if (_q.isNotEmpty) {
       final q = _q.toLowerCase();
-      list = list.where((f) {
-        if (f.path.toLowerCase().contains(q)) return true;
-        final t = widget.texts[f.path];
-        return t != null && t.toLowerCase().contains(q);
-      }).toList();
+      if (q.startsWith('#')) {
+        final tag = q.substring(1).trim();
+        if (tag.isNotEmpty) {
+          list = list.where((f) {
+            final tags = parseIdList(
+                parseFrontmatter(widget.texts[f.path] ?? '').meta['tags']);
+            return tags.any((t) => t.toLowerCase().contains(tag));
+          }).toList();
+        }
+      } else {
+        list = list.where((f) {
+          if (f.path.toLowerCase().contains(q)) return true;
+          final t = widget.texts[f.path];
+          return t != null && t.toLowerCase().contains(q);
+        }).toList();
+      }
     }
     if (widget.showDepth && _sort != _Sort.byTime) {
       final map = _sort == _Sort.byDepth ? widget.depth : widget.manualDepth;
@@ -99,7 +110,7 @@ class _VaultListScreenState extends State<VaultListScreen> {
               onChanged: (v) => setState(() => _q = v.trim()),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search, size: 20),
-                hintText: 'Поиск по содержимому…',
+                hintText: 'Поиск… или #тег',
                 isDense: true,
                 border: const OutlineInputBorder(),
                 suffixIcon: _q.isEmpty
@@ -161,32 +172,70 @@ class _VaultListScreenState extends State<VaultListScreen> {
                       final text = widget.texts[f.path];
                       final preview = _firstLine(text);
                       final type = _typeOf(text);
+                      final tags = parseIdList(
+                          parseFrontmatter(text ?? '').meta['tags']);
                       return ListTile(
                         title: Text(
                           preview.isEmpty ? '(пусто)' : preview,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Row(
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (type.isNotEmpty) ...[
-                              Text(type,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color:
-                                        theme.colorScheme.outline,
-                                  )),
-                              const SizedBox(width: 6),
-                              Text('·',
-                                  style: TextStyle(
-                                      color:
-                                          theme.colorScheme.outline)),
-                              const SizedBox(width: 6),
+                            Row(
+                              children: [
+                                if (type.isNotEmpty) ...[
+                                  Text(type,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                              color:
+                                                  theme.colorScheme.outline)),
+                                  const SizedBox(width: 6),
+                                  Text('·',
+                                      style: TextStyle(
+                                          color: theme.colorScheme.outline)),
+                                  const SizedBox(width: 6),
+                                ],
+                                Text(id,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.outline,
+                                      fontFamily: 'monospace',
+                                    )),
+                              ],
+                            ),
+                            if (tags.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Wrap(
+                                spacing: 4,
+                                runSpacing: 2,
+                                children: [
+                                  for (final tag in tags)
+                                    GestureDetector(
+                                      onTap: () {
+                                        _searchCtl.text = '#$tag';
+                                        setState(() => _q = '#$tag');
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme
+                                              .secondaryContainer,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text('#$tag',
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                    color: theme.colorScheme
+                                                        .onSecondaryContainer)),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ],
-                            Text(id,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.outline,
-                                  fontFamily: 'monospace',
-                                )),
                           ],
                         ),
                         trailing: widget.showDepth

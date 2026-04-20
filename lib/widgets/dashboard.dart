@@ -132,11 +132,30 @@ class Dashboard extends StatelessWidget {
     return chain;
   }
 
+  List<File> _filteredAtoms() {
+    final q = searchQuery.toLowerCase();
+    if (q.startsWith('#')) {
+      final tag = q.substring(1).trim();
+      if (tag.isEmpty) return atoms;
+      return atoms.where((f) {
+        final tags = parseIdList(
+            parseFrontmatter(atomText[f.path] ?? '').meta['tags']);
+        return tags.any((t) => t.toLowerCase().contains(tag));
+      }).toList();
+    }
+    return atoms
+        .where((f) => (atomText[f.path] ?? '').toLowerCase().contains(q))
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final stats = _chainStats();
-    final recent = _lastAtoms(3);
+    final isSearching = searchQuery.isNotEmpty;
+    final displayed = isSearching ? _filteredAtoms() : _lastAtoms(3);
+    final sectionLabel =
+        isSearching ? 'Найденное (${displayed.length})' : 'Недавнее';
     final deepest = _deepestMove();
     final chain = deepest == null ? <File>[] : _chainFrom(deepest);
 
@@ -150,15 +169,24 @@ class Dashboard extends StatelessWidget {
           const SizedBox(height: 16),
           _statsHeader(theme, stats),
           const SizedBox(height: 24),
-          if (recent.isNotEmpty) ...[
-            _sectionTitle(theme, 'Недавнее'),
-            const SizedBox(height: 8),
-            for (final f in recent) _atomCard(theme, f),
-            const SizedBox(height: 24),
-          ],
-          if (chain.length >= 2) ...[
+          _sectionTitle(theme, sectionLabel),
+          const SizedBox(height: 8),
+          if (displayed.isNotEmpty)
+            for (final f in displayed) _atomCard(theme, f)
+          else if (isSearching)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Ничего не найдено',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+            ),
+          const SizedBox(height: 16),
+          if (!isSearching && chain.length >= 2) ...[
             _sectionTitle(theme, 'Последняя цепочка',
-                suffix: '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest!)] ?? 0}'),
+                suffix:
+                    '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest!)] ?? 0}'),
             const SizedBox(height: 8),
             _chainRow(theme, chain),
             const SizedBox(height: 24),
@@ -175,7 +203,7 @@ class Dashboard extends StatelessWidget {
       onChanged: onSearchChanged,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.search, size: 20),
-        hintText: 'Поиск по содержимому…',
+        hintText: 'Поиск… или #тег',
         filled: true,
         fillColor: theme.colorScheme.surfaceContainerHigh,
         border: OutlineInputBorder(
@@ -295,6 +323,7 @@ class Dashboard extends StatelessWidget {
     final type = _typeOf(text);
     final time = _timestampOf(text);
     final preview = _firstLine(text);
+    final tags = parseIdList(parseFrontmatter(text ?? '').meta['tags']);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
@@ -346,6 +375,31 @@ class Dashboard extends StatelessWidget {
                         color: theme.colorScheme.outline,
                       )),
                 ),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    for (final tag in tags)
+                      GestureDetector(
+                        onTap: () => onSearchChanged('#$tag'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text('#$tag',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSecondaryContainer,
+                              )),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

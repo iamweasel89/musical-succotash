@@ -203,6 +203,43 @@ class Vault {
     );
   }
 
+  Future<void> updateAtomTags(String atomId, List<String> tags) async {
+    final f = File('${_root!.path}/$atomId.md');
+    if (!await f.exists()) return;
+    final text = await f.readAsString();
+    if (!text.startsWith('---')) return;
+    final lines = text.split('\n');
+    var end = -1;
+    for (var i = 1; i < lines.length; i++) {
+      if (lines[i].trim() == '---') {
+        end = i;
+        break;
+      }
+    }
+    if (end == -1) return;
+    final now = _nowIso();
+    final tagLine = 'tags: [${tags.join(', ')}]';
+    var hadTags = false;
+    final newFm = <String>[];
+    for (final l in lines.sublist(1, end)) {
+      if (l.startsWith('tags:')) {
+        newFm.add(tagLine);
+        hadTags = true;
+      } else if (l.startsWith('updated:')) {
+        newFm.add('updated: $now');
+      } else {
+        newFm.add(l);
+      }
+    }
+    if (!hadTags) newFm.add(tagLine);
+    final body = lines.sublist(end + 1).join('\n');
+    final sb = StringBuffer('---\n');
+    for (final l in newFm) sb.writeln(l);
+    sb.write('---\n');
+    sb.write(body);
+    await f.writeAsString(sb.toString());
+  }
+
   Future<List<File>> listAtoms() async {
     final files = await _root!
         .list()

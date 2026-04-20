@@ -41,6 +41,8 @@ List<String> parseIdList(String? value) {
       .toList();
 }
 
+List<String> parseTags(String? value) => parseIdList(value);
+
 class AtomView extends StatefulWidget {
   final String filename;
   final String rawText;
@@ -49,6 +51,7 @@ class AtomView extends StatefulWidget {
   final List<String> childMoveIds;
   final Future<void> Function(String id)? onOpenAtom;
   final Future<void> Function(String id)? onOpenMove;
+  final Future<void> Function(List<String>)? onTagsChanged;
   const AtomView({
     super.key,
     required this.filename,
@@ -58,6 +61,7 @@ class AtomView extends StatefulWidget {
     this.childMoveIds = const [],
     this.onOpenAtom,
     this.onOpenMove,
+    this.onTagsChanged,
   });
 
   @override
@@ -66,6 +70,39 @@ class AtomView extends StatefulWidget {
 
 class _AtomViewState extends State<AtomView> {
   bool _showMeta = false;
+  late List<String> _tags;
+  bool _addingTag = false;
+  final _tagCtl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final parsed = parseFrontmatter(widget.rawText);
+    _tags = parseTags(parsed.meta['tags']);
+  }
+
+  @override
+  void dispose() {
+    _tagCtl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _removeTag(String tag) async {
+    final updated = _tags.where((t) => t != tag).toList();
+    setState(() => _tags = updated);
+    await widget.onTagsChanged?.call(updated);
+  }
+
+  Future<void> _submitTag(String raw) async {
+    final t = raw.trim().toLowerCase().replaceAll(' ', '-');
+    if (t.isEmpty || _tags.contains(t)) {
+      setState(() { _addingTag = false; _tagCtl.clear(); });
+      return;
+    }
+    final updated = [..._tags, t];
+    setState(() { _tags = updated; _addingTag = false; _tagCtl.clear(); });
+    await widget.onTagsChanged?.call(updated);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,6 +194,7 @@ class _AtomViewState extends State<AtomView> {
           const SizedBox(height: 8),
           ...linkSections,
         ],
+        _tagsSection(context),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Align(
@@ -197,6 +235,64 @@ class _AtomViewState extends State<AtomView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _tagsSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final editable = widget.onTagsChanged != null;
+    if (_tags.isEmpty && !editable) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final tag in _tags)
+            Chip(
+              label: Text('#$tag',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSecondaryContainer)),
+              backgroundColor: theme.colorScheme.secondaryContainer,
+              deleteIcon: editable
+                  ? Icon(Icons.close, size: 14,
+                      color: theme.colorScheme.onSecondaryContainer)
+                  : null,
+              onDeleted: editable ? () => _removeTag(tag) : null,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+          if (editable)
+            if (_addingTag)
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  controller: _tagCtl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'тег',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: _submitTag,
+                ),
+              )
+            else
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 14),
+                label: const Text('тег', style: TextStyle(fontSize: 12)),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onPressed: () => setState(() => _addingTag = true),
+              ),
+        ],
+      ),
     );
   }
 
