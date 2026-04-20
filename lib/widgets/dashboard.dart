@@ -162,41 +162,29 @@ class Dashboard extends StatelessWidget {
     final deepest = _deepestMove();
     final chain = deepest == null ? <File>[] : _chainFrom(deepest);
 
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _searchField(theme),
-                  const SizedBox(height: 16),
-                  _statsHeader(theme, stats),
-                  if (isSearching) ...[
-                    const SizedBox(height: 16),
-                    _sectionTitle(theme,
-                        'Найденное (${_filteredAtoms().length})'),
-                    const SizedBox(height: 8),
-                    Expanded(child: _searchResults(theme)),
-                  ] else ...[
-                    const Spacer(),
-                    if (chain.length >= 2) ...[
-                      _chainHeader(theme, chain, deepest!),
-                      const SizedBox(height: 8),
-                      _chainRow(theme, chain),
-                      const SizedBox(height: 16),
-                    ],
-                    _allButtons(theme),
-                  ],
-                ],
-              ),
-            ),
-          ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _searchField(theme),
+          const SizedBox(height: 16),
+          _statsHeader(theme, stats),
+          if (isSearching) ...[
+            const SizedBox(height: 16),
+            _sectionTitle(theme, 'Найденное (${_filteredAtoms().length})'),
+            const SizedBox(height: 8),
+            Expanded(child: _searchResults(theme)),
+          ] else ...[
+            const Spacer(),
+            if (chain.length >= 2) ...[
+              _chainHeader(theme, chain, deepest!),
+              const SizedBox(height: 8),
+              _chainRow(theme, chain),
+              const SizedBox(height: 16),
+            ],
+            _allButtons(theme),
+          ],
         ],
       ),
     );
