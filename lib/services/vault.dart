@@ -19,13 +19,28 @@ class Vault {
     if (!await _moves!.exists()) await _moves!.create(recursive: true);
   }
 
-  /// Compact millisecond-precision timestamp: 20260420T051712345.
-  static String _nowId() {
-    final now = DateTime.now().toUtc();
+  /// Human-readable id: `2026-04-20_06-27-12-345_type_first-words`.
+  /// Local time, ms precision, type, slug of body.
+  static String _nowId(String type, String body) {
+    final now = DateTime.now();
     String pad(int n, [int w = 2]) => n.toString().padLeft(w, '0');
-    return '${now.year}${pad(now.month)}${pad(now.day)}'
-        'T${pad(now.hour)}${pad(now.minute)}${pad(now.second)}'
-        '${pad(now.millisecond, 3)}';
+    final date =
+        '${now.year}-${pad(now.month)}-${pad(now.day)}';
+    final time =
+        '${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}-${pad(now.millisecond, 3)}';
+    return '${date}_${time}_${type}_${_slug(body)}';
+  }
+
+  static String _slug(String text) {
+    final firstLine =
+        text.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+    var s = firstLine.trim();
+    if (s.length > 40) s = s.substring(0, 40);
+    s = s.replaceAll(RegExp(r'\s+'), '-');
+    s = s.replaceAll(RegExp(r'''[\\/:*?"<>|`'\[\]{}()]'''), '');
+    s = s.replaceAll(RegExp(r'-+'), '-');
+    s = s.replaceAll(RegExp(r'^-+|-+$'), '');
+    return s.isEmpty ? 'untitled' : s;
   }
 
   static String _nowIso() => DateTime.now().toUtc().toIso8601String();
@@ -36,7 +51,7 @@ class Vault {
     required String body,
     String? sourceMoveId,
   }) async {
-    final id = _nowId();
+    final id = _nowId(type, body);
     final now = _nowIso();
     final fm = StringBuffer()
       ..writeln('---')
@@ -67,7 +82,7 @@ class Vault {
   }) async {
     // Small delay to avoid id collision with adjacent atoms.
     await Future<void>.delayed(const Duration(milliseconds: 1));
-    final id = _nowId();
+    final id = _nowId('move', prompt ?? 'no-body');
     final ts = _nowIso();
     final fm = StringBuffer()
       ..writeln('---')

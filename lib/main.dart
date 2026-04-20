@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'services/debug_server.dart';
+import 'services/llm_client.dart';
 import 'services/settings.dart';
 import 'services/updater.dart';
 import 'services/vault.dart';
@@ -128,18 +129,40 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final model = await Settings.getModel();
       final maxTokens = await Settings.getMaxTokens();
-      final result = await _vault.runMove(
+      final llm = await LlmClient.call(
         apiKey: apiKey,
         model: model,
         maxTokens: maxTokens,
         prompt: prompt,
       );
-      _promptCtl.clear();
-      setState(() {
-        _lastStatus =
-            'Ход ${result.moveId} · in ${result.tokensIn} / out ${result.tokensOut}';
-      });
-      await _refresh();
+      if (!mounted) return;
+      final save = await _showPreview(prompt, llm);
+      if (save == true) {
+        final promptId =
+            await _vault.writeAtom(type: 'prompt', body: prompt);
+        final responseId =
+            await _vault.writeAtom(type: 'response', body: llm.content);
+        final moveId = await _vault.writeMove(
+          model: llm.model,
+          contextRefs: [promptId],
+          resultRefs: [responseId],
+          tokensIn: llm.tokensIn,
+          tokensOut: llm.tokensOut,
+          gate: 'manual',
+          prompt: prompt,
+        );
+        _promptCtl.clear();
+        setState(() {
+          _lastStatus =
+              'Сохранён ход $moveId · in ${llm.tokensIn} / out ${llm.tokensOut}';
+        });
+        await _refresh();
+      } else {
+        setState(() {
+          _lastStatus =
+              'Отброшено (токены потрачены: in ${llm.tokensIn} / out ${llm.tokensOut})';
+        });
+      }
     } catch (e) {
       setState(() {
         _lastStatus = 'Ошибка: $e';
@@ -152,6 +175,70 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<bool?> _showPreview(String prompt, LlmResponse llm) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.8,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (_, sc) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Ответ модели',
+                    style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Text(
+                  '${llm.model} · in ${llm.tokensIn} / out ${llm.tokensOut} токенов',
+                  style: Theme.of(ctx).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: sc,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(llm.content),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('Отбросить'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text('Сохранить'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
