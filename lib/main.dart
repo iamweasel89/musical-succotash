@@ -8,6 +8,7 @@ import 'services/llm_client.dart';
 import 'services/settings.dart';
 import 'services/updater.dart';
 import 'services/vault.dart';
+import 'widgets/atom_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -365,6 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openAtom(File f) async {
     final text = await f.readAsString();
     if (!mounted) return;
+    final filename = f.path.split('/').last;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -373,8 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
         initialChildSize: 0.9,
         builder: (_, sc) => SingleChildScrollView(
           controller: sc,
-          padding: const EdgeInsets.all(16),
-          child: SelectableText(text),
+          child: AtomView(filename: filename, rawText: text),
         ),
       ),
     );

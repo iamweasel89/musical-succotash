@@ -13,6 +13,7 @@ dependencies:
   package_info_plus: ^8.0.0
   path_provider: ^2.1.0
   shared_preferences: ^2.2.0
+  flutter_markdown: ^0.7.3
 
 dev_dependencies:
   flutter_test:
