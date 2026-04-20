@@ -12,19 +12,27 @@ class DebugServer {
   final Vault vault;
   HttpServer? _server;
   String? _boundUri;
+  String? _lastError;
 
   DebugServer(this.vault);
 
   String? get boundUri => _boundUri;
+  String? get lastError => _lastError;
   bool get isRunning => _server != null;
 
   Future<void> start() async {
     if (_server != null) return;
+    _lastError = null;
     final port = await Settings.getDebugPort();
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-    _server = server;
-    _boundUri = 'http://0.0.0.0:$port';
-    server.listen(_handle, onError: (_) {});
+    try {
+      final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+      _server = server;
+      _boundUri = 'http://0.0.0.0:$port';
+      server.listen(_handle, onError: (_) {});
+    } catch (e) {
+      _lastError = e.toString();
+      rethrow;
+    }
   }
 
   Future<void> stop() async {

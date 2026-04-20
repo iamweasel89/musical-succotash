@@ -79,13 +79,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _debug ??= DebugServer(_vault);
     try {
       await _debug!.start();
-    } catch (_) {}
+    } catch (_) {
+      // Error stays in _debug.lastError, surfaced in Settings UI.
+    }
     if (mounted) setState(() {});
   }
 
   Future<void> _stopDebug() async {
     await _debug?.stop();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _restartDebug() async {
+    await _stopDebug();
+    await _startDebug();
   }
 
   Future<void> _seedIfEmpty() async {
@@ -166,7 +173,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       await _stopDebug();
                     }
                   },
-                  debugRunning: _debug?.isRunning ?? false,
+                  onRestart: _restartDebug,
+                  debugServer: _debug,
                 ),
               ),
             ),
@@ -279,11 +287,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function(bool enabled)? onDebugToggled;
-  final bool debugRunning;
+  final Future<void> Function()? onRestart;
+  final DebugServer? debugServer;
   const SettingsScreen({
     super.key,
     this.onDebugToggled,
-    this.debugRunning = false,
+    this.onRestart,
+    this.debugServer,
   });
 
   @override
@@ -432,6 +442,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text('Адреса устройства:',
               style: Theme.of(context).textTheme.bodySmall),
           for (final ip in _ips) SelectableText(ip),
+          const SizedBox(height: 12),
+          Text(
+            widget.debugServer == null
+                ? 'Сервер: не инициализирован'
+                : widget.debugServer!.isRunning
+                    ? 'Сервер: запущен на ${widget.debugServer!.boundUri}'
+                    : 'Сервер: остановлен',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (widget.debugServer?.lastError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: SelectableText(
+                'Ошибка старта: ${widget.debugServer!.lastError}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: widget.onRestart == null
+                ? null
+                : () async {
+                    await widget.onRestart!();
+                    if (mounted) setState(() {});
+                  },
+            icon: const Icon(Icons.restart_alt),
+            label: const Text('Перезапустить сервер'),
+          ),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _save,
