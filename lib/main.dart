@@ -45,8 +45,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _vault = Vault();
   final _promptCtl = TextEditingController();
+  final _searchCtl = TextEditingController();
   DebugServer? _debug;
   List<File> _atoms = [];
+  String _search = '';
   bool _loading = true;
   bool _sending = false;
   String? _lastStatus;
@@ -62,7 +64,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     AppUpdater.removeListener(_onUpdater);
     _promptCtl.dispose();
+    _searchCtl.dispose();
     super.dispose();
+  }
+
+  List<File> get _visibleAtoms {
+    if (_search.isEmpty) return _atoms;
+    final q = _search.toLowerCase();
+    return _atoms.where((f) {
+      return f.path.toLowerCase().contains(q);
+    }).toList();
   }
 
   void _onUpdater() {
@@ -298,33 +309,74 @@ class _HomeScreenState extends State<HomeScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: TextField(
+                    controller: _searchCtl,
+                    onChanged: (v) => setState(() => _search = v.trim()),
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      hintText: 'Поиск по имени атома…',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      suffixIcon: _search.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                _searchCtl.clear();
+                                setState(() => _search = '');
+                              },
+                            ),
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _refresh,
-                    child: _atoms.isEmpty
-                        ? ListView(
-                            physics:
-                                const AlwaysScrollableScrollPhysics(),
-                            children: const [
-                              SizedBox(height: 200),
-                              Center(child: Text('Волт пуст')),
-                            ],
-                          )
-                        : ListView.separated(
-                            physics:
-                                const AlwaysScrollableScrollPhysics(),
-                            itemCount: _atoms.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final f = _atoms[i];
-                              final name = f.path.split('/').last;
-                              return ListTile(
-                                title: Text(name),
-                                onTap: () => _openAtom(f),
-                              );
-                            },
-                          ),
+                    child: Builder(builder: (_) {
+                      final visible = _visibleAtoms;
+                      if (_atoms.isEmpty) {
+                        return ListView(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          children: const [
+                            SizedBox(height: 200),
+                            Center(child: Text('Волт пуст')),
+                          ],
+                        );
+                      }
+                      if (visible.isEmpty) {
+                        return ListView(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            const SizedBox(height: 120),
+                            Center(
+                              child: Text(
+                                'Ничего не найдено по «$_search»',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return ListView.separated(
+                        physics:
+                            const AlwaysScrollableScrollPhysics(),
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final f = visible[i];
+                          final name = f.path.split('/').last;
+                          return ListTile(
+                            title: Text(name),
+                            onTap: () => _openAtom(f),
+                          );
+                        },
+                      );
+                    }),
                   ),
                 ),
                 if (_lastStatus != null)
