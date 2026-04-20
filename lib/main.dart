@@ -9,6 +9,7 @@ import 'services/settings.dart';
 import 'services/updater.dart';
 import 'services/vault.dart';
 import 'widgets/atom_view.dart';
+import 'widgets/context_picker_sheet.dart';
 import 'widgets/quick_add_sheet.dart';
 
 void main() {
@@ -46,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _vault = Vault();
   final _promptCtl = TextEditingController();
   final _searchCtl = TextEditingController();
+  final Set<String> _ctx = {};
   DebugServer? _debug;
   List<File> _atoms = [];
   String _search = '';
@@ -142,11 +144,26 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final model = await Settings.getModel();
       final maxTokens = await Settings.getMaxTokens();
+      // Build context block from selected atoms.
+      final ctxIds = <String>[];
+      final ctxBlocks = <String>[];
+      for (final p in _ctx) {
+        try {
+          final f = File(p);
+          final text = await f.readAsString();
+          final name = p.split('/').last.replaceAll(RegExp(r'\.md$'), '');
+          ctxIds.add(name);
+          ctxBlocks.add('=== АТОМ $name ===\n$text');
+        } catch (_) {}
+      }
+      final enriched = ctxBlocks.isEmpty
+          ? prompt
+          : 'КОНТЕКСТ:\n\n${ctxBlocks.join('\n\n')}\n\n---\n\nЗАПРОС:\n$prompt';
       final llm = await LlmClient.call(
         apiKey: apiKey,
         model: model,
         maxTokens: maxTokens,
-        prompt: prompt,
+        prompt: enriched,
       );
       if (!mounted) return;
       final save = await _showPreview(prompt, llm);
@@ -157,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
             await _vault.writeAtom(type: 'response', body: llm.content);
         final moveId = await _vault.writeMove(
           model: llm.model,
-          contextRefs: [promptId],
+          contextRefs: [promptId, ...ctxIds],
           resultRefs: [responseId],
           tokensIn: llm.tokensIn,
           tokensOut: llm.tokensOut,
@@ -166,6 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         _promptCtl.clear();
         setState(() {
+          _ctx.clear();
           _lastStatus =
               'Сохранён ход $moveId · in ${llm.tokensIn} / out ${llm.tokensOut}';
         });
@@ -188,6 +206,23 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _pickContext() async {
+    final result = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ContextPickerSheet(
+        atoms: _atoms,
+        initialSelection: _ctx,
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      _ctx
+        ..clear()
+        ..addAll(result);
+    });
   }
 
   Future<void> _quickAdd() async {
@@ -392,39 +427,67 @@ class _HomeScreenState extends State<HomeScreen> {
                   top: false,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          tooltip: 'Быстрая запись (без LLM)',
-                          icon: const Icon(Icons.note_add_outlined),
-                          onPressed: _sending ? null : _quickAdd,
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _promptCtl,
-                            enabled: !_sending,
-                            maxLines: 4,
-                            minLines: 1,
-                            decoration: const InputDecoration(
-                              hintText: 'Промт…',
-                              border: OutlineInputBorder(),
-                              isDense: true,
+                        if (_ctx.isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: 4, left: 8),
+                              child: Text(
+                                'Контекст: ${_ctx.length} атом(ов)',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          tooltip: 'Отправить',
-                          icon: _sending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.send),
-                          onPressed: _sending ? null : _send,
+                        Row(
+                          children: [
+                            IconButton(
+                              tooltip: 'Быстрая запись (без LLM)',
+                              icon: const Icon(Icons.note_add_outlined),
+                              onPressed: _sending ? null : _quickAdd,
+                            ),
+                            IconButton(
+                              tooltip: 'Контекст для следующего промта',
+                              icon: Badge(
+                                label: _ctx.isEmpty
+                                    ? null
+                                    : Text('${_ctx.length}'),
+                                isLabelVisible: _ctx.isNotEmpty,
+                                child: const Icon(Icons.attach_file),
+                              ),
+                              onPressed: _sending ? null : _pickContext,
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _promptCtl,
+                                enabled: !_sending,
+                                maxLines: 4,
+                                minLines: 1,
+                                decoration: const InputDecoration(
+                                  hintText: 'Промт…',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filled(
+                              tooltip: 'Отправить',
+                              icon: _sending
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.send),
+                              onPressed: _sending ? null : _send,
+                            ),
+                          ],
                         ),
                       ],
                     ),
