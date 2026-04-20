@@ -53,7 +53,7 @@
 
 - На Windows машине оператора поднят Tailscale Funnel на адрес Windows, который проксит через Tailscale на телефон.
 - **Публичный URL**: `https://windows-3tm8vsu.tail60e676.ts.net`
-- **Токен**: `X-Debug-Token: tok_hhrsofczk7`
+- **Токен**: `X-Debug-Token: tok_hhryb0of5a`
 - Проверка контакта: `GET /vault/list` должен вернуть JSON.
 - Если токен утечёт или надоест — перегенерировать в Настройки → Debug HTTP-сервер → иконка ↺ рядом с токеном. В этом файле обновить вручную.
 - Запись атома за оператора: `POST /vault/atoms` с body `{"type": "note", "body": "…"}`.
