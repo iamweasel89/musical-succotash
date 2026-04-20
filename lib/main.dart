@@ -121,11 +121,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refresh() async {
     final files = await _vault.listAtoms();
+    final staged = await Settings.getStagedPrompt();
     if (mounted) {
       setState(() {
         _atoms = files;
         _loading = false;
       });
+      if (staged.isNotEmpty && _promptCtl.text.trim().isEmpty) {
+        _promptCtl.text = staged;
+        await Settings.clearStagedPrompt();
+        if (mounted) setState(() {});
+      }
     }
   }
 

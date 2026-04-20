@@ -83,4 +83,21 @@ class Settings {
     await _ensure();
     await _prefs!.setInt(_kDebugPort, v);
   }
+
+  static const _kStagedPrompt = 'staged_prompt';
+
+  static Future<String> getStagedPrompt() async {
+    await _ensure();
+    return _prefs!.getString(_kStagedPrompt) ?? '';
+  }
+
+  static Future<void> setStagedPrompt(String v) async {
+    await _ensure();
+    await _prefs!.setString(_kStagedPrompt, v);
+  }
+
+  static Future<void> clearStagedPrompt() async {
+    await _ensure();
+    await _prefs!.remove(_kStagedPrompt);
+  }
 }

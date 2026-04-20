@@ -75,6 +75,10 @@ class DebugServer {
         await _writeAtom(req);
         return;
       }
+      if (method == 'POST' && path == '/input/stage') {
+        await _stageInput(req);
+        return;
+      }
       req.response.statusCode = 404;
       await req.response.close();
     } catch (e) {
@@ -179,6 +183,19 @@ class DebugServer {
     req.response
       ..headers.contentType = ContentType.json
       ..write(jsonEncode({'id': id}));
+    await req.response.close();
+  }
+
+  /// Stage a prompt into SharedPreferences. The home screen picks it up on
+  /// next refresh and pre-fills the prompt input field for the operator.
+  Future<void> _stageInput(HttpRequest req) async {
+    final raw = await utf8.decoder.bind(req).join();
+    final body = jsonDecode(raw) as Map<String, dynamic>;
+    final prompt = body['prompt'] as String? ?? '';
+    await Settings.setStagedPrompt(prompt);
+    req.response
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode({'staged': prompt.length}));
     await req.response.close();
   }
 }
