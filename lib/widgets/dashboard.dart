@@ -159,64 +159,83 @@ class Dashboard extends StatelessWidget {
     final theme = Theme.of(context);
     final stats = _chainStats();
     final isSearching = searchQuery.isNotEmpty;
-    final displayed = isSearching ? _filteredAtoms() : _lastAtoms(3);
-    final sectionLabel =
-        isSearching ? 'Найденное (${displayed.length})' : 'Недавнее';
     final deepest = _deepestMove();
     final chain = deepest == null ? <File>[] : _chainFrom(deepest);
 
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        children: [
-          _searchField(theme),
-          const SizedBox(height: 16),
-          _statsHeader(theme, stats),
-          const SizedBox(height: 24),
-          _sectionTitle(theme, sectionLabel),
-          const SizedBox(height: 8),
-          if (displayed.isNotEmpty)
-            for (final f in displayed) _atomCard(theme, f)
-          else if (isSearching)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Ничего не найдено',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+    return LayoutBuilder(
+      builder: (context, constraints) => RefreshIndicator(
+        onRefresh: onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: constraints.maxHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _searchField(theme),
+                  const SizedBox(height: 16),
+                  _statsHeader(theme, stats),
+                  if (isSearching) ...[
+                    const SizedBox(height: 16),
+                    _sectionTitle(theme,
+                        'Найденное (${_filteredAtoms().length})'),
+                    const SizedBox(height: 8),
+                    Expanded(child: _searchResults(theme)),
+                  ] else ...[
+                    const Spacer(),
+                    if (chain.length >= 2) ...[
+                      _chainHeader(theme, chain, deepest!),
+                      const SizedBox(height: 8),
+                      _chainRow(theme, chain),
+                      const SizedBox(height: 16),
+                    ],
+                    _allButtons(theme),
+                  ],
+                ],
               ),
             ),
-          const SizedBox(height: 16),
-          if (!isSearching && chain.length >= 2) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _sectionTitle(theme, 'Последняя цепочка',
-                      suffix:
-                          '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest!)] ?? 0}'),
-                ),
-                if (onOpenChain != null)
-                  GestureDetector(
-                    onTap: onOpenChain,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text('Открыть →',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary)),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _chainRow(theme, chain),
-            const SizedBox(height: 24),
-          ],
-          _allButtons(theme),
-          const SizedBox(height: 8),
-        ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _searchResults(ThemeData theme) {
+    final results = _filteredAtoms();
+    if (results.isEmpty) {
+      return Center(
+        child: Text('Ничего не найдено',
+            style:
+                theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+      );
+    }
+    return ListView.builder(
+      itemCount: results.length,
+      itemBuilder: (_, i) => _atomCard(theme, results[i]),
+    );
+  }
+
+  Widget _chainHeader(ThemeData theme, List<File> chain, File deepest) {
+    return Row(
+      children: [
+        Expanded(
+          child: _sectionTitle(theme, 'Последняя цепочка',
+              suffix:
+                  '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest)] ?? 0}'),
+        ),
+        if (onOpenChain != null)
+          GestureDetector(
+            onTap: onOpenChain,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text('Открыть →',
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: theme.colorScheme.primary)),
+            ),
+          ),
+      ],
     );
   }
 
