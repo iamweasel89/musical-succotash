@@ -11,6 +11,7 @@ import 'services/settings.dart';
 import 'services/updater.dart';
 import 'services/vault.dart';
 import 'widgets/atom_view.dart';
+import 'widgets/chain_screen.dart';
 import 'widgets/context_picker_sheet.dart';
 import 'widgets/dashboard.dart';
 import 'widgets/quick_add_sheet.dart';
@@ -59,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final Map<String, int> _depth = {};
   final Map<String, int> _manualDepth = {};
   final Map<String, List<String>> _children = {};
+  List<List<File>> _chains = [];
   String _search = '';
   bool _loading = true;
   bool _sending = false;
@@ -214,6 +216,42 @@ class _HomeScreenState extends State<HomeScreen> {
         (_children[p] ??= []).add(child);
       }
     });
+
+    _chains = _buildChains(parents);
+  }
+
+  List<List<File>> _buildChains(Map<String, List<String>> parents) {
+    if (_moves.isEmpty) return [];
+    final byId = <String, File>{};
+    for (final f in _moves) byId[_idOf(f)] = f;
+    final roots = byId.keys.where((id) {
+      final ps = parents[id] ?? [];
+      return !ps.any((p) => byId.containsKey(p));
+    }).toList();
+    return (roots.map((r) => _deepestPath(r, byId)).where((c) => c.isNotEmpty).toList()
+      ..sort((a, b) => b.length.compareTo(a.length)));
+  }
+
+  List<File> _deepestPath(String id, Map<String, File> byId) {
+    var best = <String>[];
+    void dfs(String cur, List<String> path) {
+      if (path.length > 60) return;
+      final next = [...path, cur];
+      final kids = (_children[cur] ?? []).where((k) => byId.containsKey(k)).toList();
+      if (kids.isEmpty) {
+        if (next.length > best.length) best = next;
+      } else {
+        for (final k in kids) dfs(k, next);
+      }
+    }
+    dfs(id, []);
+    return best.map((i) => byId[i]!).toList();
+  }
+
+  Map<String, String> get _atomTextById {
+    final map = <String, String>{};
+    for (final f in _atoms) map[_idOf(f)] = _atomText[f.path] ?? '';
+    return map;
   }
 
   Future<void> _send() async {
@@ -481,6 +519,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     onOpenMove: _openMove,
                     onOpenAllAtoms: _openAllAtoms,
                     onOpenAllMoves: _openAllMoves,
+                    onOpenChain: _chains.isEmpty ? null : () => _openChain(_chains.first),
+                    onOpenAllChains: _openAllChains,
+                    chainCount: _chains.length,
                     searchQuery: _search,
                     onSearchChanged: (v) =>
                         setState(() => _search = v.trim()),
@@ -570,6 +611,32 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
     );
+  }
+
+  void _openChain(List<File> chain) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ChainScreen(
+        moves: chain,
+        atomTextById: _atomTextById,
+        moveTexts: _moveText,
+        depth: _depth,
+        manualDepth: _manualDepth,
+        onOpenMove: _openMove,
+      ),
+    ));
+  }
+
+  void _openAllChains() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ChainListScreen(
+        chains: _chains,
+        atomTextById: _atomTextById,
+        moveTexts: _moveText,
+        depth: _depth,
+        manualDepth: _manualDepth,
+        onOpenChain: _openChain,
+      ),
+    ));
   }
 
   void _openAllAtoms() {

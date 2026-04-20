@@ -16,6 +16,9 @@ class Dashboard extends StatelessWidget {
   final Future<void> Function(File) onOpenMove;
   final VoidCallback onOpenAllAtoms;
   final VoidCallback onOpenAllMoves;
+  final VoidCallback? onOpenChain;
+  final VoidCallback onOpenAllChains;
+  final int chainCount;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
   final Future<void> Function() onRefresh;
@@ -33,6 +36,9 @@ class Dashboard extends StatelessWidget {
     required this.onOpenMove,
     required this.onOpenAllAtoms,
     required this.onOpenAllMoves,
+    required this.onOpenAllChains,
+    required this.chainCount,
+    this.onOpenChain,
     required this.searchQuery,
     required this.onSearchChanged,
     required this.onRefresh,
@@ -184,9 +190,25 @@ class Dashboard extends StatelessWidget {
             ),
           const SizedBox(height: 16),
           if (!isSearching && chain.length >= 2) ...[
-            _sectionTitle(theme, 'Последняя цепочка',
-                suffix:
-                    '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest!)] ?? 0}'),
+            Row(
+              children: [
+                Expanded(
+                  child: _sectionTitle(theme, 'Последняя цепочка',
+                      suffix:
+                          '⛓ ${chain.length} · ✓ ${manualDepth[_idOf(deepest!)] ?? 0}'),
+                ),
+                if (onOpenChain != null)
+                  GestureDetector(
+                    onTap: onOpenChain,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text('Открыть →',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary)),
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             _chainRow(theme, chain),
             const SizedBox(height: 24),
@@ -239,11 +261,11 @@ class Dashboard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _smallStat(theme, '$chainCount', 'цепочек'),
+              const SizedBox(height: 4),
               _smallStat(theme, '${stats.pure}', 'чистых'),
               const SizedBox(height: 4),
-              _smallStat(theme, '${stats.mixed}', 'смешанных'),
-              const SizedBox(height: 4),
-              _smallStat(theme, '${stats.solo}', 'одиночных'),
+              _smallStat(theme, '${stats.mixed}', 'смешан.'),
             ],
           ),
         ),
@@ -486,21 +508,34 @@ class Dashboard extends StatelessWidget {
   }
 
   Widget _allButtons(ThemeData theme) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onOpenAllAtoms,
-            icon: const Icon(Icons.list_alt, size: 18),
-            label: Text('Все атомы (${atoms.length})'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onOpenAllAtoms,
+                icon: const Icon(Icons.list_alt, size: 18),
+                label: Text('Атомы (${atoms.length})'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onOpenAllMoves,
+                icon: const Icon(Icons.account_tree_outlined, size: 18),
+                label: Text('Ходы (${moves.length})'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: onOpenAllMoves,
-            icon: const Icon(Icons.account_tree_outlined, size: 18),
-            label: Text('Все ходы (${moves.length})'),
+            onPressed: onOpenAllChains,
+            icon: const Icon(Icons.linear_scale, size: 18),
+            label: Text('Цепочки ($chainCount)'),
           ),
         ),
       ],
