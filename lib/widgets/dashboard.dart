@@ -176,7 +176,7 @@ class Dashboard extends StatelessWidget {
             const SizedBox(height: 8),
             Expanded(child: _searchResults(theme)),
           ] else ...[
-            const Spacer(),
+            const SizedBox(height: 16),
             if (chain.length >= 2) ...[
               _chainHeader(theme, chain, deepest!),
               const SizedBox(height: 8),
