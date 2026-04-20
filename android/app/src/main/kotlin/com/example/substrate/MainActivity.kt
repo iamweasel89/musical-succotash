@@ -1,4 +1,4 @@
-package com.example.hex_canvas_mobile
+package com.example.substrate
 
 import android.app.DownloadManager
 import android.app.PendingIntent
@@ -16,8 +16,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-private const val APK_FILENAME = "hex_canvas_update.apk"
-private const val ACTION_INSTALL_STATUS = "com.example.hex_canvas_mobile.INSTALL_STATUS"
+private const val APK_FILENAME = "substrate_update.apk"
+private const val ACTION_INSTALL_STATUS = "com.example.substrate.INSTALL_STATUS"
 
 // Receives the PackageInstaller broadcast and starts the confirmation activity.
 // STATUS_PENDING_USER_ACTION carries the real "Do you want to install?" intent
@@ -48,7 +48,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "hex_canvas/updater")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "substrate/updater")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
 
@@ -63,7 +63,7 @@ class MainActivity : FlutterActivity() {
                             val dm =
                                 getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                             val req = DownloadManager.Request(Uri.parse(url))
-                                .setTitle("Hex Canvas Update")
+                                .setTitle("Substrate Update")
                                 .setDescription("Downloading update…")
                                 .setDestinationInExternalPublicDir(
                                     Environment.DIRECTORY_DOWNLOADS, APK_FILENAME
@@ -176,7 +176,7 @@ class MainActivity : FlutterActivity() {
                             )
                             result.error(
                                 "NEED_PERMISSION",
-                                "Разрешите установку из неизвестных источников для Hex Canvas в открывшихся настройках, затем нажмите Install снова.",
+                                "Разрешите установку из неизвестных источников в открывшихся настройках, затем нажмите Install снова.",
                                 null
                             )
                             return@setMethodCallHandler

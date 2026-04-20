@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -35,11 +36,16 @@ class UpdateInfo {
 
 // ── Updater singleton ──────────────────────────────────────────────────────
 class AppUpdater {
-  static const _releasesLatest =
-      'https://github.com/iamweasel89/musical-succotash/releases/latest';
+  // Substrate uses tag prefix `sub-build-N` and queries the list of releases
+  // via GitHub API to filter by that prefix — `releases/latest` is owned by
+  // the other branch's tag scheme and cannot be reused here.
+  static const _apiReleases =
+      'https://api.github.com/repos/iamweasel89/musical-succotash/releases?per_page=20';
   static const _repoBase =
       'https://github.com/iamweasel89/musical-succotash';
-  static const _channel = MethodChannel('hex_canvas/updater');
+  static const _tagPrefix = 'sub-build-';
+  static const _apkAsset = 'substrate.apk';
+  static const _channel = MethodChannel('substrate/updater');
 
   // DownloadManager constants (mirror android.app.DownloadManager)
   static const int _dmStatusSuccessful = 8;
@@ -142,39 +148,33 @@ class AppUpdater {
           packageBuild > _installedBuild ? packageBuild : _installedBuild;
       _log('check: currentBuild=$currentBuild packageBuild=$packageBuild');
 
-      // Use the public releases/latest page redirect instead of the API
-      // endpoint — the API has a 60 req/hour anonymous rate limit that
-      // carrier NAT quickly exhausts; the web redirect has no such limit.
-      // GET /releases/latest → 302 → /releases/tag/build-N  (or 404 if none)
-      final releaseClient = http.Client();
-      String tagName;
-      try {
-        final req = http.Request('GET', Uri.parse(_releasesLatest))
-          ..followRedirects = false;
-        final streamed = await releaseClient
-            .send(req)
-            .timeout(const Duration(seconds: 10));
-        _log('check: releases/latest status=${streamed.statusCode}');
-
-        if (streamed.statusCode == 404) {
-          state = UpdState.upToDate;
-          message = 'Build $currentBuild — no releases yet';
-          _notify();
-          return;
-        }
-        if (streamed.statusCode != 302 && streamed.statusCode != 301) {
-          throw Exception('releases/latest returned ${streamed.statusCode}');
-        }
-        final location = streamed.headers['location'] ?? '';
-        _log('check: location=$location');
-        // location ends with /releases/tag/build-N
-        tagName = Uri.parse(location).pathSegments.last;
-      } finally {
-        releaseClient.close();
+      // Query GitHub API for recent releases and find the highest sub-build-N
+      // tag. Rate limit is 60/hour anonymous; for a single user this is fine.
+      final resp = await http
+          .get(Uri.parse(_apiReleases))
+          .timeout(const Duration(seconds: 10));
+      _log('check: api status=${resp.statusCode}');
+      if (resp.statusCode != 200) {
+        throw Exception('api/releases returned ${resp.statusCode}');
       }
-
-      final latestBuild =
-          int.tryParse(tagName.replaceFirst('build-', '')) ?? 0;
+      final List<dynamic> list = jsonDecode(resp.body) as List<dynamic>;
+      int latestBuild = 0;
+      String tagName = '';
+      for (final r in list) {
+        final tag = (r as Map<String, dynamic>)['tag_name'] as String? ?? '';
+        if (!tag.startsWith(_tagPrefix)) continue;
+        final n = int.tryParse(tag.substring(_tagPrefix.length)) ?? 0;
+        if (n > latestBuild) {
+          latestBuild = n;
+          tagName = tag;
+        }
+      }
+      if (latestBuild == 0) {
+        state = UpdState.upToDate;
+        message = 'Build $currentBuild — no substrate releases yet';
+        _notify();
+        return;
+      }
       _log('check: latestBuild=$latestBuild tag=$tagName');
 
       if (latestBuild <= currentBuild) {
@@ -185,7 +185,7 @@ class AppUpdater {
       }
 
       final downloadUrl =
-          '$_repoBase/releases/download/$tagName/hex-canvas.apk';
+          '$_repoBase/releases/download/$tagName/$_apkAsset';
       _log('check: downloadUrl=$downloadUrl');
 
       state = UpdState.available;

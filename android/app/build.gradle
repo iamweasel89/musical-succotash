@@ -13,7 +13,7 @@ def flutterVersionCode = localProps.getProperty("flutter.versionCode") ?: "1"
 def flutterVersionName = localProps.getProperty("flutter.versionName") ?: "1.0"
 
 android {
-    namespace "com.example.hex_canvas_mobile"
+    namespace "com.example.substrate"
     compileSdk 34
 
     compileOptions {
@@ -36,7 +36,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.hex_canvas_mobile"
+        applicationId "com.example.substrate"
         minSdk 21
         targetSdk 34
         versionCode flutterVersionCode.toInteger()

@@ -3,17 +3,15 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
-    <!-- ВР4: local reminders -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
-        android:label="Hex Canvas"
+        android:label="Substrate"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -37,28 +35,13 @@
             android:name=".InstallStatusReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.hex_canvas_mobile.INSTALL_STATUS" />
+                <action android:name="com.example.substrate.INSTALL_STATUS" />
             </intent-filter>
         </receiver>
-
-        <!-- ВР4: flutter_local_notifications receivers -->
-        <receiver android:exported="false"
-            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
-        <receiver android:exported="false"
-            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
-            </intent-filter>
-        </receiver>
-        <receiver android:exported="false"
-            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.example.hex_canvas_mobile.fileProvider"
+            android:authorities="com.example.substrate.fileProvider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

@@ -1,6 +1,6 @@
-name: hex_canvas_mobile
-description: Hexagonal canvas with nodes, edges, pan and zoom.
-version: 1.0.0+1
+name: substrate
+description: Molecule substrate — atoms, moves, LLM-native memory.
+version: 0.1.0+1
 publish_to: none
 
 environment:
@@ -9,17 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  uuid: ^4.3.0
   http: ^1.2.0
-  hive_flutter: ^1.1.0
   package_info_plus: ^8.0.0
   path_provider: ^2.1.0
-  flutter_markdown: ^0.7.3
-  share_plus: ^7.2.1
-  file_picker: ^6.2.1
-  flutter_local_notifications: ^17.2.3
-  timezone: ^0.9.4
-  flutter_timezone: ^1.0.8
+  shared_preferences: ^2.2.0
 
 dev_dependencies:
   flutter_test:
@@ -29,4 +22,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/seed/decisions.json
+    - assets/seed/substrate.md
