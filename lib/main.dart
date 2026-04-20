@@ -12,7 +12,9 @@ import 'services/updater.dart';
 import 'services/vault.dart';
 import 'widgets/atom_view.dart';
 import 'widgets/context_picker_sheet.dart';
+import 'widgets/dashboard.dart';
 import 'widgets/quick_add_sheet.dart';
+import 'widgets/vault_list_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,16 +47,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-enum MoveSort { byTime, byDepth, byManualDepth }
-
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> {
   final _vault = Vault();
   final _promptCtl = TextEditingController();
-  final _searchCtl = TextEditingController();
   final Set<String> _ctx = {};
   DebugServer? _debug;
-  late final TabController _tab;
   List<File> _atoms = [];
   List<File> _moves = [];
   final Map<String, String> _atomText = {};
@@ -62,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen>
   final Map<String, int> _depth = {};
   final Map<String, int> _manualDepth = {};
   final Map<String, List<String>> _children = {};
-  MoveSort _moveSort = MoveSort.byTime;
   String _search = '';
   bool _loading = true;
   bool _sending = false;
@@ -71,10 +67,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
-    _tab.addListener(() {
-      if (mounted) setState(() {});
-    });
     AppUpdater.addListener(_onUpdater);
     _bootstrap();
   }
@@ -82,38 +74,11 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     AppUpdater.removeListener(_onUpdater);
-    _tab.dispose();
     _promptCtl.dispose();
-    _searchCtl.dispose();
     super.dispose();
   }
 
-  List<File> _filter(List<File> list, Map<String, String> texts) {
-    if (_search.isEmpty) return list;
-    final q = _search.toLowerCase();
-    return list.where((f) {
-      if (f.path.toLowerCase().contains(q)) return true;
-      final text = texts[f.path];
-      return text != null && text.toLowerCase().contains(q);
-    }).toList();
-  }
-
   String _idOf(File f) => f.path.split('/').last.replaceAll('.md', '');
-
-  List<File> get _visibleAtoms => _filter(_atoms, _atomText);
-
-  List<File> get _visibleMoves {
-    final filtered = _filter(_moves, _moveText);
-    if (_moveSort == MoveSort.byTime) return filtered;
-    final sorted = [...filtered];
-    final map = _moveSort == MoveSort.byDepth ? _depth : _manualDepth;
-    sorted.sort((a, b) {
-      final da = map[_idOf(a)] ?? 0;
-      final db = map[_idOf(b)] ?? 0;
-      return db.compareTo(da);
-    });
-    return sorted;
-  }
 
   void _onUpdater() {
     if (mounted) setState(() {});
@@ -465,99 +430,28 @@ class _HomeScreenState extends State<HomeScreen>
             onPressed: () => _showUpdater(context),
           ),
         ],
-        bottom: TabBar(
-          controller: _tab,
-          tabs: [
-            Tab(text: 'Атомы (${_atoms.length})'),
-            Tab(text: 'Ходы (${_moves.length})'),
-          ],
-        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                  child: TextField(
-                    controller: _searchCtl,
-                    onChanged: (v) => setState(() => _search = v.trim()),
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      hintText: 'Поиск по содержимому…',
-                      isDense: true,
-                      border: const OutlineInputBorder(),
-                      suffixIcon: _search.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () {
-                                _searchCtl.clear();
-                                setState(() => _search = '');
-                              },
-                            ),
-                    ),
-                  ),
-                ),
                 Expanded(
-                  child: TabBarView(
-                    controller: _tab,
-                    children: [
-                      _buildList(
-                        all: _atoms,
-                        visible: _visibleAtoms,
-                        emptyLabel: 'Атомов нет',
-                        onTapFile: _openAtom,
-                        withDepth: false,
-                      ),
-                      Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            child: Row(
-                              children: [
-                                Text('Сортировка:',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall),
-                                const SizedBox(width: 8),
-                                DropdownButton<MoveSort>(
-                                  value: _moveSort,
-                                  isDense: true,
-                                  items: const [
-                                    DropdownMenuItem(
-                                        value: MoveSort.byTime,
-                                        child: Text('по времени')),
-                                    DropdownMenuItem(
-                                        value: MoveSort.byDepth,
-                                        child: Text('по глубине ⛓')),
-                                    DropdownMenuItem(
-                                        value: MoveSort.byManualDepth,
-                                        child:
-                                            Text('по чистой глубине ✓')),
-                                  ],
-                                  onChanged: (v) {
-                                    if (v != null) {
-                                      setState(() => _moveSort = v);
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildList(
-                              all: _moves,
-                              visible: _visibleMoves,
-                              emptyLabel: 'Ходов нет',
-                              onTapFile: _openMove,
-                              withDepth: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: Dashboard(
+                    atoms: _atoms,
+                    moves: _moves,
+                    atomText: _atomText,
+                    moveText: _moveText,
+                    depth: _depth,
+                    manualDepth: _manualDepth,
+                    children: _children,
+                    onOpenAtom: _openAtom,
+                    onOpenMove: _openMove,
+                    onOpenAllAtoms: _openAllAtoms,
+                    onOpenAllMoves: _openAllMoves,
+                    searchQuery: _search,
+                    onSearchChanged: (v) =>
+                        setState(() => _search = v.trim()),
+                    onRefresh: _refresh,
                   ),
                 ),
                 if (_lastStatus != null)
@@ -584,7 +478,8 @@ class _HomeScreenState extends State<HomeScreen>
                                   const EdgeInsets.only(bottom: 4, left: 8),
                               child: Text(
                                 'Контекст: ${_ctx.length} атом(ов)',
-                                style: Theme.of(context).textTheme.bodySmall,
+                                style:
+                                    Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
                           ),
@@ -644,84 +539,29 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildList({
-    required List<File> all,
-    required List<File> visible,
-    required String emptyLabel,
-    required Future<void> Function(File) onTapFile,
-    bool withDepth = false,
-  }) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: Builder(builder: (_) {
-        if (all.isEmpty) {
-          return ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              const SizedBox(height: 200),
-              Center(child: Text(emptyLabel)),
-            ],
-          );
-        }
-        if (visible.isEmpty) {
-          return ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              const SizedBox(height: 120),
-              Center(
-                child: Text(
-                  'Ничего не найдено по «$_search»',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
-          );
-        }
-        return ListView.separated(
-          physics: const AlwaysScrollableScrollPhysics(),
-          itemCount: visible.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, i) {
-            final f = visible[i];
-            final name = f.path.split('/').last;
-            Widget? trailing;
-            if (withDepth) {
-              final id = _idOf(f);
-              final d = _depth[id] ?? 0;
-              final md = _manualDepth[id] ?? 0;
-              trailing = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _depthChip('⛓ $d',
-                      color: Theme.of(context).colorScheme.surfaceContainerHigh),
-                  const SizedBox(width: 4),
-                  _depthChip('✓ $md',
-                      color: md == d
-                          ? Colors.green.withOpacity(0.25)
-                          : Colors.orange.withOpacity(0.20)),
-                ],
-              );
-            }
-            return ListTile(
-              title: Text(name),
-              trailing: trailing,
-              onTap: () => onTapFile(f),
-            );
-          },
-        );
-      }),
-    );
+  void _openAllAtoms() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => VaultListScreen(
+        title: 'Все атомы',
+        files: _atoms,
+        texts: _atomText,
+        onOpenFile: _openAtom,
+      ),
+    ));
   }
 
-  Widget _depthChip(String text, {required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(10),
+  void _openAllMoves() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => VaultListScreen(
+        title: 'Все ходы',
+        files: _moves,
+        texts: _moveText,
+        depth: _depth,
+        manualDepth: _manualDepth,
+        showDepth: true,
+        onOpenFile: _openMove,
       ),
-      child: Text(text, style: const TextStyle(fontSize: 11)),
-    );
+    ));
   }
 
   Future<void> _openAtom(File f) async {
