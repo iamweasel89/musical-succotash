@@ -58,12 +58,14 @@ class DebugServer {
         return;
       }
       if (method == 'GET' && path.startsWith('/vault/atoms/')) {
-        final id = path.substring('/vault/atoms/'.length);
+        final id = Uri.decodeComponent(
+            path.substring('/vault/atoms/'.length));
         await _readAtom(req, id);
         return;
       }
       if (method == 'GET' && path.startsWith('/vault/moves/')) {
-        final id = path.substring('/vault/moves/'.length);
+        final id = Uri.decodeComponent(
+            path.substring('/vault/moves/'.length));
         await _readMove(req, id);
         return;
       }
@@ -80,12 +82,14 @@ class DebugServer {
         return;
       }
       if (method == 'DELETE' && path.startsWith('/vault/atoms/')) {
-        final id = path.substring('/vault/atoms/'.length);
+        final id = Uri.decodeComponent(
+            path.substring('/vault/atoms/'.length));
         await _deleteAtom(req, id);
         return;
       }
       if (method == 'DELETE' && path.startsWith('/vault/moves/')) {
-        final id = path.substring('/vault/moves/'.length);
+        final id = Uri.decodeComponent(
+            path.substring('/vault/moves/'.length));
         await _deleteMove(req, id);
         return;
       }
