@@ -79,6 +79,16 @@ class DebugServer {
         await _stageInput(req);
         return;
       }
+      if (method == 'DELETE' && path.startsWith('/vault/atoms/')) {
+        final id = path.substring('/vault/atoms/'.length);
+        await _deleteAtom(req, id);
+        return;
+      }
+      if (method == 'DELETE' && path.startsWith('/vault/moves/')) {
+        final id = path.substring('/vault/moves/'.length);
+        await _deleteMove(req, id);
+        return;
+      }
       req.response.statusCode = 404;
       await req.response.close();
     } catch (e) {
@@ -111,9 +121,10 @@ class DebugServer {
       await req.response.close();
       return;
     }
-    req.response
-      ..headers.contentType = ContentType('text', 'markdown')
-      ..write(await f.readAsString());
+    final bytes = await f.readAsBytes();
+    req.response.headers
+        .set(HttpHeaders.contentTypeHeader, 'text/markdown; charset=utf-8');
+    req.response.add(bytes);
     await req.response.close();
   }
 
@@ -125,9 +136,30 @@ class DebugServer {
       await req.response.close();
       return;
     }
+    final bytes = await f.readAsBytes();
+    req.response.headers
+        .set(HttpHeaders.contentTypeHeader, 'text/markdown; charset=utf-8');
+    req.response.add(bytes);
+    await req.response.close();
+  }
+
+  Future<void> _deleteAtom(HttpRequest req, String id) async {
+    final name = id.endsWith('.md') ? id : '$id.md';
+    final f = File('${vault.root.path}/$name');
+    if (await f.exists()) await f.delete();
     req.response
-      ..headers.contentType = ContentType('text', 'markdown')
-      ..write(await f.readAsString());
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode({'deleted': name}));
+    await req.response.close();
+  }
+
+  Future<void> _deleteMove(HttpRequest req, String id) async {
+    final name = id.endsWith('.md') ? id : '$id.md';
+    final f = File('${vault.moves.path}/$name');
+    if (await f.exists()) await f.delete();
+    req.response
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode({'deleted': name}));
     await req.response.close();
   }
 
