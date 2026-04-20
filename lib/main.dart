@@ -653,7 +653,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _modelCtl = TextEditingController();
   final _maxCtl = TextEditingController();
   final _portCtl = TextEditingController();
+  final _githubCtl = TextEditingController();
   bool _obscure = true;
+  bool _obscureGithub = true;
   bool _debugEnabled = false;
   String _debugToken = '';
   List<String> _ips = [];
@@ -669,6 +671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _modelCtl.text = await Settings.getModel();
     _maxCtl.text = (await Settings.getMaxTokens()).toString();
     _portCtl.text = (await Settings.getDebugPort()).toString();
+    _githubCtl.text = await Settings.getGithubToken();
     _debugEnabled = await Settings.getDebugEnabled();
     _debugToken = await Settings.getDebugToken();
     _ips = await _listIps();
@@ -697,6 +700,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _modelCtl.dispose();
     _maxCtl.dispose();
     _portCtl.dispose();
+    _githubCtl.dispose();
     super.dispose();
   }
 
@@ -708,6 +712,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final port = int.tryParse(_portCtl.text.trim()) ??
         Settings.defaultDebugPort;
     await Settings.setDebugPort(port);
+    await Settings.setGithubToken(_githubCtl.text.trim());
     await Settings.setDebugEnabled(_debugEnabled);
     await widget.onDebugToggled?.call(_debugEnabled);
     if (mounted) Navigator.of(context).pop();
@@ -748,6 +753,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: const InputDecoration(
               labelText: 'Max tokens',
               border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _githubCtl,
+            obscureText: _obscureGithub,
+            decoration: InputDecoration(
+              labelText: 'GitHub token (для обновлений)',
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(_obscureGithub
+                    ? Icons.visibility
+                    : Icons.visibility_off),
+                onPressed: () =>
+                    setState(() => _obscureGithub = !_obscureGithub),
+              ),
             ),
           ),
           const SizedBox(height: 24),
