@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -19,28 +20,11 @@ class Vault {
     if (!await _moves!.exists()) await _moves!.create(recursive: true);
   }
 
-  /// Human-readable id: `2026-04-20_06-27-12-345_type_first-words`.
-  /// Local time, ms precision, type, slug of body.
-  static String _nowId(String type, String body) {
-    final now = DateTime.now();
-    String pad(int n, [int w = 2]) => n.toString().padLeft(w, '0');
-    final date =
-        '${now.year}-${pad(now.month)}-${pad(now.day)}';
-    final time =
-        '${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}-${pad(now.millisecond, 3)}';
-    return '${date}_${time}_${type}_${_slug(body)}';
-  }
-
-  static String _slug(String text) {
-    final firstLine =
-        text.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
-    var s = firstLine.trim();
-    if (s.length > 40) s = s.substring(0, 40);
-    s = s.replaceAll(RegExp(r'\s+'), '-');
-    s = s.replaceAll(RegExp(r'''[\\/:*?"<>|`'\[\]{}()]'''), '');
-    s = s.replaceAll(RegExp(r'-+'), '-');
-    s = s.replaceAll(RegExp(r'^-+|-+$'), '');
-    return s.isEmpty ? 'untitled' : s;
+  /// 6-hex id. Example: `a3f7c2`. Collision domain ~16M — enough for a
+  /// personal vault in practice; collision handling can come later.
+  static final _rnd = Random();
+  static String _nowId() {
+    return _rnd.nextInt(0x1000000).toRadixString(16).padLeft(6, '0');
   }
 
   static String _nowIso() => DateTime.now().toUtc().toIso8601String();
@@ -51,7 +35,7 @@ class Vault {
     required String body,
     String? sourceMoveId,
   }) async {
-    final id = _nowId(type, body);
+    final id = _nowId();
     final now = _nowIso();
     final fm = StringBuffer()
       ..writeln('---')
@@ -82,7 +66,7 @@ class Vault {
   }) async {
     // Small delay to avoid id collision with adjacent atoms.
     await Future<void>.delayed(const Duration(milliseconds: 1));
-    final id = _nowId('move', prompt ?? 'no-body');
+    final id = _nowId();
     final ts = _nowIso();
     final fm = StringBuffer()
       ..writeln('---')

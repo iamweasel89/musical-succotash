@@ -50,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<String> _ctx = {};
   DebugServer? _debug;
   List<File> _atoms = [];
+  final Map<String, String> _atomText = {};
   String _search = '';
   bool _loading = true;
   bool _sending = false;
@@ -74,7 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_search.isEmpty) return _atoms;
     final q = _search.toLowerCase();
     return _atoms.where((f) {
-      return f.path.toLowerCase().contains(q);
+      if (f.path.toLowerCase().contains(q)) return true;
+      final text = _atomText[f.path];
+      return text != null && text.toLowerCase().contains(q);
     }).toList();
   }
 
@@ -121,10 +124,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refresh() async {
     final files = await _vault.listAtoms();
+    // Load contents so search can match inside bodies, not only filenames.
+    final texts = <String, String>{};
+    for (final f in files) {
+      try {
+        texts[f.path] = await f.readAsString();
+      } catch (_) {}
+    }
     final staged = await Settings.getStagedPrompt();
     if (mounted) {
       setState(() {
         _atoms = files;
+        _atomText
+          ..clear()
+          ..addAll(texts);
         _loading = false;
       });
       if (staged.isNotEmpty && _promptCtl.text.trim().isEmpty) {
@@ -357,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onChanged: (v) => setState(() => _search = v.trim()),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search, size: 20),
-                      hintText: 'Поиск по имени атома…',
+                      hintText: 'Поиск по содержимому…',
                       isDense: true,
                       border: const OutlineInputBorder(),
                       suffixIcon: _search.isEmpty
