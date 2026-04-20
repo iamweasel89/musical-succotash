@@ -96,15 +96,81 @@ class Vault {
     return id;
   }
 
-  /// Single full move cycle: write prompt atom, call LLM, write response atom,
-  /// write move record linking them. Returns the new atom ids.
+  /// Reads `source_move_id` from atom frontmatter, if present.
+  Future<String?> _sourceMoveId(String atomId) async {
+    final f = File('${_root!.path}/$atomId.md');
+    if (!await f.exists()) return null;
+    final text = await f.readAsString();
+    final m = RegExp(r'^source_move_id:\s*(\S+)', multiLine: true)
+        .firstMatch(text);
+    return m?.group(1);
+  }
+
+  /// Returns source_move_id set of the given atom ids (for parent_move_ids).
+  Future<Set<String>> parentMovesFor(List<String> atomIds) async {
+    final out = <String>{};
+    for (final id in atomIds) {
+      final pm = await _sourceMoveId(id);
+      if (pm != null) out.add(pm);
+    }
+    return out;
+  }
+
+  /// Writes a move record with a pre-chosen id. Used by the UI path where
+  /// the caller reserves the id before writing atoms so those atoms can
+  /// carry source_move_id pointing back to this move.
+  Future<void> writeMoveRecord({
+    required String moveId,
+    required String model,
+    required List<String> contextRefs,
+    required List<String> resultRefs,
+    required int tokensIn,
+    required int tokensOut,
+    List<String> parentMoveIds = const [],
+    String gate = 'manual',
+    String? prompt,
+  }) async {
+    final ts = _nowIso();
+    final fm = StringBuffer()
+      ..writeln('---')
+      ..writeln('id: $moveId')
+      ..writeln('timestamp: $ts')
+      ..writeln('model: $model')
+      ..writeln('context_refs: [${contextRefs.join(', ')}]')
+      ..writeln('result_refs: [${resultRefs.join(', ')}]')
+      ..writeln('tokens_in: $tokensIn')
+      ..writeln('tokens_out: $tokensOut')
+      ..writeln('parent_move_ids: [${parentMoveIds.join(', ')}]')
+      ..writeln('gate: $gate')
+      ..writeln('---');
+    if (prompt != null) fm..writeln()..writeln(prompt);
+    final f = File('${_moves!.path}/$moveId.md');
+    await f.writeAsString(fm.toString());
+  }
+
+  /// Picks a fresh unique id for a move without writing anything yet.
+  Future<String> reserveMoveId() async {
+    String id;
+    File f;
+    do {
+      id = _nowId();
+      f = File('${_moves!.path}/$id.md');
+    } while (await f.exists());
+    return id;
+  }
+
+  /// Single full move cycle for API path: writes prompt atom, calls LLM,
+  /// writes response atom, writes move record with proper lineage.
   Future<MoveResult> runMove({
     required String apiKey,
     required String model,
     required int maxTokens,
     required String prompt,
+    List<String> contextAtomIds = const [],
   }) async {
-    final promptId = await writeAtom(type: 'prompt', body: prompt);
+    final moveId = await reserveMoveId();
+    final promptId =
+        await writeAtom(type: 'prompt', body: prompt, sourceMoveId: moveId);
     final llm = await LlmClient.call(
       apiKey: apiKey,
       model: model,
@@ -114,13 +180,18 @@ class Vault {
     final responseId = await writeAtom(
       type: 'response',
       body: llm.content,
+      sourceMoveId: moveId,
     );
-    final moveId = await writeMove(
+    final parents = await parentMovesFor(contextAtomIds);
+    await writeMoveRecord(
+      moveId: moveId,
       model: llm.model,
-      contextRefs: [promptId],
+      contextRefs: [promptId, ...contextAtomIds],
       resultRefs: [responseId],
       tokensIn: llm.tokensIn,
       tokensOut: llm.tokensOut,
+      parentMoveIds: parents.toList(),
+      gate: 'auto',
       prompt: prompt,
     );
     return MoveResult(

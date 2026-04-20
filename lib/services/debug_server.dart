@@ -186,11 +186,16 @@ class DebugServer {
     }
     final model = await Settings.getModel();
     final maxTokens = await Settings.getMaxTokens();
+    final ctxIds = (body['context_atom_ids'] as List<dynamic>?)
+            ?.whereType<String>()
+            .toList() ??
+        const <String>[];
     final result = await vault.runMove(
       apiKey: apiKey,
       model: model,
       maxTokens: maxTokens,
       prompt: prompt,
+      contextAtomIds: ctxIds,
     );
     req.response
       ..headers.contentType = ContentType.json

@@ -27,10 +27,32 @@ import 'package:flutter_markdown/flutter_markdown.dart';
   return (meta: meta, body: body);
 }
 
+/// Parses `[id1, id2, id3]` list syntax from frontmatter value.
+List<String> parseIdList(String? value) {
+  if (value == null) return const [];
+  final s = value.trim();
+  if (!s.startsWith('[') || !s.endsWith(']')) return const [];
+  final inner = s.substring(1, s.length - 1).trim();
+  if (inner.isEmpty) return const [];
+  return inner
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+}
+
 class AtomView extends StatefulWidget {
   final String filename;
   final String rawText;
-  const AtomView({super.key, required this.filename, required this.rawText});
+  final Future<void> Function(String id)? onOpenAtom;
+  final Future<void> Function(String id)? onOpenMove;
+  const AtomView({
+    super.key,
+    required this.filename,
+    required this.rawText,
+    this.onOpenAtom,
+    this.onOpenMove,
+  });
 
   @override
   State<AtomView> createState() => _AtomViewState();
@@ -45,12 +67,52 @@ class _AtomViewState extends State<AtomView> {
     final meta = parsed.meta;
     final body = parsed.body;
     final chips = <Widget>[];
-    for (final key in ['type', 'created', 'model', 'tokens_in', 'tokens_out']) {
+    for (final key in ['type', 'created', 'timestamp', 'model', 'tokens_in', 'tokens_out', 'gate']) {
       final v = meta[key];
       if (v != null && v.isNotEmpty) {
         chips.add(_chip('$key: $v'));
       }
     }
+    final sourceMoveId = meta['source_move_id'];
+    final contextRefs = parseIdList(meta['context_refs']);
+    final resultRefs = parseIdList(meta['result_refs']);
+    final parentMoveIds = parseIdList(meta['parent_move_ids']);
+
+    final linkSections = <Widget>[];
+
+    if (sourceMoveId != null && sourceMoveId.isNotEmpty) {
+      linkSections.add(_linkRow(
+        context,
+        label: 'Источник-ход',
+        ids: [sourceMoveId],
+        onTap: widget.onOpenMove,
+      ));
+    }
+    if (parentMoveIds.isNotEmpty) {
+      linkSections.add(_linkRow(
+        context,
+        label: 'Родительские ходы',
+        ids: parentMoveIds,
+        onTap: widget.onOpenMove,
+      ));
+    }
+    if (contextRefs.isNotEmpty) {
+      linkSections.add(_linkRow(
+        context,
+        label: 'Контекст',
+        ids: contextRefs,
+        onTap: widget.onOpenAtom,
+      ));
+    }
+    if (resultRefs.isNotEmpty) {
+      linkSections.add(_linkRow(
+        context,
+        label: 'Результат',
+        ids: resultRefs,
+        onTap: widget.onOpenAtom,
+      ));
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -71,6 +133,10 @@ class _AtomViewState extends State<AtomView> {
               children: chips,
             ),
           ),
+        if (linkSections.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...linkSections,
+        ],
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Align(
@@ -111,6 +177,47 @@ class _AtomViewState extends State<AtomView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _linkRow(
+    BuildContext context, {
+    required String label,
+    required List<String> ids,
+    Future<void> Function(String id)? onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ),
+          Expanded(
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final id in ids)
+                  ActionChip(
+                    label: Text(id, style: const TextStyle(fontSize: 12)),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize:
+                        MaterialTapTargetSize.shrinkWrap,
+                    onPressed: onTap == null ? null : () => onTap(id),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

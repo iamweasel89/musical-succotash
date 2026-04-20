@@ -43,14 +43,18 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   final _vault = Vault();
   final _promptCtl = TextEditingController();
   final _searchCtl = TextEditingController();
   final Set<String> _ctx = {};
   DebugServer? _debug;
+  late final TabController _tab;
   List<File> _atoms = [];
+  List<File> _moves = [];
   final Map<String, String> _atomText = {};
+  final Map<String, String> _moveText = {};
   String _search = '';
   bool _loading = true;
   bool _sending = false;
@@ -59,6 +63,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _tab = TabController(length: 2, vsync: this);
+    _tab.addListener(() {
+      if (mounted) setState(() {});
+    });
     AppUpdater.addListener(_onUpdater);
     _bootstrap();
   }
@@ -66,20 +74,24 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     AppUpdater.removeListener(_onUpdater);
+    _tab.dispose();
     _promptCtl.dispose();
     _searchCtl.dispose();
     super.dispose();
   }
 
-  List<File> get _visibleAtoms {
-    if (_search.isEmpty) return _atoms;
+  List<File> _filter(List<File> list, Map<String, String> texts) {
+    if (_search.isEmpty) return list;
     final q = _search.toLowerCase();
-    return _atoms.where((f) {
+    return list.where((f) {
       if (f.path.toLowerCase().contains(q)) return true;
-      final text = _atomText[f.path];
+      final text = texts[f.path];
       return text != null && text.toLowerCase().contains(q);
     }).toList();
   }
+
+  List<File> get _visibleAtoms => _filter(_atoms, _atomText);
+  List<File> get _visibleMoves => _filter(_moves, _moveText);
 
   void _onUpdater() {
     if (mounted) setState(() {});
@@ -123,21 +135,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    final files = await _vault.listAtoms();
-    // Load contents so search can match inside bodies, not only filenames.
-    final texts = <String, String>{};
-    for (final f in files) {
+    final atomFiles = await _vault.listAtoms();
+    final moveFiles = await _vault.listMoves();
+    final atomTexts = <String, String>{};
+    for (final f in atomFiles) {
       try {
-        texts[f.path] = await f.readAsString();
+        atomTexts[f.path] = await f.readAsString();
+      } catch (_) {}
+    }
+    final moveTexts = <String, String>{};
+    for (final f in moveFiles) {
+      try {
+        moveTexts[f.path] = await f.readAsString();
       } catch (_) {}
     }
     final staged = await Settings.getStagedPrompt();
     if (mounted) {
       setState(() {
-        _atoms = files;
+        _atoms = atomFiles;
+        _moves = moveFiles;
         _atomText
           ..clear()
-          ..addAll(texts);
+          ..addAll(atomTexts);
+        _moveText
+          ..clear()
+          ..addAll(moveTexts);
         _loading = false;
       });
       if (staged.isNotEmpty && _promptCtl.text.trim().isEmpty) {
@@ -187,16 +209,20 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       final save = await _showPreview(prompt, llm);
       if (save == true) {
-        final promptId =
-            await _vault.writeAtom(type: 'prompt', body: prompt);
-        final responseId =
-            await _vault.writeAtom(type: 'response', body: llm.content);
-        final moveId = await _vault.writeMove(
+        final moveId = await _vault.reserveMoveId();
+        final promptId = await _vault.writeAtom(
+            type: 'prompt', body: prompt, sourceMoveId: moveId);
+        final responseId = await _vault.writeAtom(
+            type: 'response', body: llm.content, sourceMoveId: moveId);
+        final parents = await _vault.parentMovesFor(ctxIds);
+        await _vault.writeMoveRecord(
+          moveId: moveId,
           model: llm.model,
           contextRefs: [promptId, ...ctxIds],
           resultRefs: [responseId],
           tokensIn: llm.tokensIn,
           tokensOut: llm.tokensOut,
+          parentMoveIds: parents.toList(),
           gate: 'manual',
           prompt: prompt,
         );
@@ -358,6 +384,13 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => _showUpdater(context),
           ),
         ],
+        bottom: TabBar(
+          controller: _tab,
+          tabs: [
+            Tab(text: 'Атомы (${_atoms.length})'),
+            Tab(text: 'Ходы (${_moves.length})'),
+          ],
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -386,51 +419,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: Builder(builder: (_) {
-                      final visible = _visibleAtoms;
-                      if (_atoms.isEmpty) {
-                        return ListView(
-                          physics:
-                              const AlwaysScrollableScrollPhysics(),
-                          children: const [
-                            SizedBox(height: 200),
-                            Center(child: Text('Волт пуст')),
-                          ],
-                        );
-                      }
-                      if (visible.isEmpty) {
-                        return ListView(
-                          physics:
-                              const AlwaysScrollableScrollPhysics(),
-                          children: [
-                            const SizedBox(height: 120),
-                            Center(
-                              child: Text(
-                                'Ничего не найдено по «$_search»',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-                      return ListView.separated(
-                        physics:
-                            const AlwaysScrollableScrollPhysics(),
-                        itemCount: visible.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(height: 1),
-                        itemBuilder: (_, i) {
-                          final f = visible[i];
-                          final name = f.path.split('/').last;
-                          return ListTile(
-                            title: Text(name),
-                            onTap: () => _openAtom(f),
-                          );
-                        },
-                      );
-                    }),
+                  child: TabBarView(
+                    controller: _tab,
+                    children: [
+                      _buildList(
+                        all: _atoms,
+                        visible: _visibleAtoms,
+                        emptyLabel: 'Атомов нет',
+                        onTapFile: _openAtom,
+                      ),
+                      _buildList(
+                        all: _moves,
+                        visible: _visibleMoves,
+                        emptyLabel: 'Ходов нет',
+                        onTapFile: _openMove,
+                      ),
+                    ],
                   ),
                 ),
                 if (_lastStatus != null)
@@ -517,11 +521,60 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildList({
+    required List<File> all,
+    required List<File> visible,
+    required String emptyLabel,
+    required Future<void> Function(File) onTapFile,
+  }) {
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: Builder(builder: (_) {
+        if (all.isEmpty) {
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              const SizedBox(height: 200),
+              Center(child: Text(emptyLabel)),
+            ],
+          );
+        }
+        if (visible.isEmpty) {
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              const SizedBox(height: 120),
+              Center(
+                child: Text(
+                  'Ничего не найдено по «$_search»',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          );
+        }
+        return ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: visible.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (_, i) {
+            final f = visible[i];
+            final name = f.path.split('/').last;
+            return ListTile(
+              title: Text(name),
+              onTap: () => onTapFile(f),
+            );
+          },
+        );
+      }),
+    );
+  }
+
   Future<void> _openAtom(File f) async {
     final text = await f.readAsString();
     if (!mounted) return;
     final filename = f.path.split('/').last;
-    showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => DraggableScrollableSheet(
@@ -529,10 +582,48 @@ class _HomeScreenState extends State<HomeScreen> {
         initialChildSize: 0.9,
         builder: (_, sc) => SingleChildScrollView(
           controller: sc,
-          child: AtomView(filename: filename, rawText: text),
+          child: AtomView(
+            filename: filename,
+            rawText: text,
+            onOpenAtom: _openAtomById,
+            onOpenMove: _openMoveById,
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _openMove(File f) async {
+    final text = await f.readAsString();
+    if (!mounted) return;
+    final filename = f.path.split('/').last;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.9,
+        builder: (_, sc) => SingleChildScrollView(
+          controller: sc,
+          child: AtomView(
+            filename: filename,
+            rawText: text,
+            onOpenAtom: _openAtomById,
+            onOpenMove: _openMoveById,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAtomById(String id) async {
+    final f = File('${_vault.root.path}/$id.md');
+    if (await f.exists()) await _openAtom(f);
+  }
+
+  Future<void> _openMoveById(String id) async {
+    final f = File('${_vault.moves.path}/$id.md');
+    if (await f.exists()) await _openMove(f);
   }
 
   void _showUpdater(BuildContext context) {
