@@ -45,7 +45,10 @@ class Vault {
       ..writeln('updated: $now')
       ..writeln('type: $type');
     if (sourceMoveId != null) fm.writeln('source_move_id: $sourceMoveId');
-    fm.writeln('---')..writeln()..writeln(body);
+    fm
+      ..writeln('---')
+      ..writeln()
+      ..writeln(body);
     final f = File('${_root!.path}/$id.md');
     await f.writeAsString(fm.toString());
     return id;
@@ -79,7 +82,9 @@ class Vault {
       ..writeln('gate: $gate')
       ..writeln('---');
     if (prompt != null) {
-      fm..writeln()..writeln(prompt);
+      fm
+        ..writeln()
+        ..writeln(prompt);
     }
     final f = File('${_moves!.path}/$id.md');
     await f.writeAsString(fm.toString());
