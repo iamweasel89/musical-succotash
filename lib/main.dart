@@ -279,6 +279,9 @@ class _HomeScreenState extends State<HomeScreen> {
               'Сохранён ход $moveId · in ${llm.tokensIn} / out ${llm.tokensOut}';
         });
         await _refresh();
+        if (await Settings.getAutoTagEnabled()) {
+          _autoTag(responseId, llm.content);
+        }
       } else {
         setState(() {
           _lastStatus =
@@ -328,6 +331,36 @@ class _HomeScreenState extends State<HomeScreen> {
       _lastStatus = 'Записано: $id';
     });
     await _refresh();
+  }
+
+  void _autoTag(String atomId, String content) async {
+    try {
+      final apiKey = await Settings.getApiKey();
+      if (apiKey.isEmpty) return;
+      final model = await Settings.getModel();
+      final snippet = content.length > 600
+          ? content.substring(0, 600)
+          : content;
+      final result = await LlmClient.call(
+        apiKey: apiKey,
+        model: model,
+        maxTokens: 64,
+        prompt:
+            'Give 2-5 short lowercase tags for this text, comma-separated, NO other text:\n\n$snippet',
+      );
+      final tags = result.content
+          .split(',')
+          .map((t) => t
+              .trim()
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^\wа-яёa-z0-9\-]', caseSensitive: false), ''))
+          .where((t) => t.isNotEmpty && t.length <= 30)
+          .take(5)
+          .toList();
+      if (tags.isEmpty) return;
+      await _vault.updateAtomTags(atomId, tags);
+      if (mounted) await _refresh();
+    } catch (_) {}
   }
 
   Future<bool?> _showPreview(String prompt, LlmResponse llm) {
@@ -568,6 +601,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = await f.readAsString();
     if (!mounted) return;
     final filename = f.path.split('/').last;
+    final atomId = filename.replaceAll('.md', '');
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -581,6 +615,10 @@ class _HomeScreenState extends State<HomeScreen> {
             rawText: text,
             onOpenAtom: _openAtomById,
             onOpenMove: _openMoveById,
+            onTagsChanged: (tags) async {
+              await _vault.updateAtomTags(atomId, tags);
+              if (mounted) await _refresh();
+            },
           ),
         ),
       ),
@@ -657,6 +695,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _obscure = true;
   bool _obscureGithub = true;
   bool _debugEnabled = false;
+  bool _autoTagEnabled = true;
   String _debugToken = '';
   List<String> _ips = [];
 
@@ -672,6 +711,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _maxCtl.text = (await Settings.getMaxTokens()).toString();
     _portCtl.text = (await Settings.getDebugPort()).toString();
     _githubCtl.text = await Settings.getGithubToken();
+    _autoTagEnabled = await Settings.getAutoTagEnabled();
     _debugEnabled = await Settings.getDebugEnabled();
     _debugToken = await Settings.getDebugToken();
     _ips = await _listIps();
@@ -713,6 +753,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Settings.defaultDebugPort;
     await Settings.setDebugPort(port);
     await Settings.setGithubToken(_githubCtl.text.trim());
+    await Settings.setAutoTagEnabled(_autoTagEnabled);
     await Settings.setDebugEnabled(_debugEnabled);
     await widget.onDebugToggled?.call(_debugEnabled);
     if (mounted) Navigator.of(context).pop();
@@ -771,7 +812,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Авто-тегирование после хода'),
+            subtitle: const Text('Второй API-вызов для тегов'),
+            value: _autoTagEnabled,
+            onChanged: (v) => setState(() => _autoTagEnabled = v),
+          ),
+          const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 8),
           Text('Debug HTTP-сервер',

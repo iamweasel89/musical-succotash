@@ -134,6 +134,15 @@ class Dashboard extends StatelessWidget {
 
   List<File> _filteredAtoms() {
     final q = searchQuery.toLowerCase();
+    if (q.startsWith('#')) {
+      final tag = q.substring(1).trim();
+      if (tag.isEmpty) return atoms;
+      return atoms.where((f) {
+        final tags = parseIdList(
+            parseFrontmatter(atomText[f.path] ?? '').meta['tags']);
+        return tags.any((t) => t.toLowerCase().contains(tag));
+      }).toList();
+    }
     return atoms
         .where((f) => (atomText[f.path] ?? '').toLowerCase().contains(q))
         .toList();
@@ -194,7 +203,7 @@ class Dashboard extends StatelessWidget {
       onChanged: onSearchChanged,
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.search, size: 20),
-        hintText: 'Поиск по содержимому…',
+        hintText: 'Поиск… или #тег',
         filled: true,
         fillColor: theme.colorScheme.surfaceContainerHigh,
         border: OutlineInputBorder(
@@ -314,6 +323,7 @@ class Dashboard extends StatelessWidget {
     final type = _typeOf(text);
     final time = _timestampOf(text);
     final preview = _firstLine(text);
+    final tags = parseIdList(parseFrontmatter(text ?? '').meta['tags']);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
@@ -365,6 +375,31 @@ class Dashboard extends StatelessWidget {
                         color: theme.colorScheme.outline,
                       )),
                 ),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    for (final tag in tags)
+                      GestureDetector(
+                        onTap: () => onSearchChanged('#$tag'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text('#$tag',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSecondaryContainer,
+                              )),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
