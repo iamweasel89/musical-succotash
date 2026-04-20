@@ -35,7 +35,12 @@ class Vault {
     required String body,
     String? sourceMoveId,
   }) async {
-    final id = _nowId();
+    String id;
+    File f;
+    do {
+      id = _nowId();
+      f = File('${_root!.path}/$id.md');
+    } while (await f.exists());
     final now = _nowIso();
     final fm = StringBuffer()
       ..writeln('---')
@@ -48,7 +53,6 @@ class Vault {
       ..writeln('---')
       ..writeln()
       ..writeln(body);
-    final f = File('${_root!.path}/$id.md');
     await f.writeAsString(fm.toString());
     return id;
   }
@@ -64,9 +68,12 @@ class Vault {
     String gate = 'auto',
     String? prompt,
   }) async {
-    // Small delay to avoid id collision with adjacent atoms.
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-    final id = _nowId();
+    String id;
+    File f;
+    do {
+      id = _nowId();
+      f = File('${_moves!.path}/$id.md');
+    } while (await f.exists());
     final ts = _nowIso();
     final fm = StringBuffer()
       ..writeln('---')
@@ -85,7 +92,6 @@ class Vault {
         ..writeln()
         ..writeln(prompt);
     }
-    final f = File('${_moves!.path}/$id.md');
     await f.writeAsString(fm.toString());
     return id;
   }
