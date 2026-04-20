@@ -40,7 +40,7 @@ class AppUpdater {
   // via GitHub API to filter by that prefix — `releases/latest` is owned by
   // the other branch's tag scheme and cannot be reused here.
   static const _apiReleases =
-      'https://api.github.com/repos/iamweasel89/musical-succotash/releases?per_page=20';
+      'https://api.github.com/repos/iamweasel89/musical-succotash/releases?per_page=100';
   static const _repoBase =
       'https://github.com/iamweasel89/musical-succotash';
   static const _tagPrefix = 'sub-build-';

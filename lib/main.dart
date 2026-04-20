@@ -844,6 +844,7 @@ class _UpdaterSheetState extends State<UpdaterSheet> {
     super.initState();
     AppUpdater.addListener(_onTick);
     _loadPackage();
+    if (AppUpdater.state == UpdState.idle) AppUpdater.check();
   }
 
   Future<void> _loadPackage() async {
