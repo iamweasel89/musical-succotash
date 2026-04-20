@@ -9,6 +9,7 @@ import 'services/settings.dart';
 import 'services/updater.dart';
 import 'services/vault.dart';
 import 'widgets/atom_view.dart';
+import 'widgets/quick_add_sheet.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -178,6 +179,20 @@ class _HomeScreenState extends State<HomeScreen> {
         .showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  Future<void> _quickAdd() async {
+    final result = await showModalBottomSheet<QuickAddResult>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const QuickAddSheet(),
+    );
+    if (result == null) return;
+    final id = await _vault.writeAtom(type: result.type, body: result.body);
+    setState(() {
+      _lastStatus = 'Записано: $id';
+    });
+    await _refresh();
+  }
+
   Future<bool?> _showPreview(String prompt, LlmResponse llm) {
     return showModalBottomSheet<bool>(
       context: context,
@@ -327,6 +342,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.all(8),
                     child: Row(
                       children: [
+                        IconButton(
+                          tooltip: 'Быстрая запись (без LLM)',
+                          icon: const Icon(Icons.note_add_outlined),
+                          onPressed: _sending ? null : _quickAdd,
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _promptCtl,
